@@ -4,14 +4,29 @@ import {
   getJobById,
   getApplicationByJobId,
   updateApplicationCoverLetter,
+  updateApplicationPdfPaths,
   logActivity,
 } from '../../db/queries.js';
-import { generateCoverLetter } from './apply.js';
+import { getStructuredCV } from '../../matching/cv-parser.js';
+import { generateCoverLetter } from '../../generator/cover-letter.js';
+import { generateApplicationPackage } from '../../generator/pdf-builder.js';
+import { getActivityForJob } from '../../db/queries.js';
 import {
   afterGeneratePortalKeyboard,
   afterGenerateEmailKeyboard,
   afterGenerateBothKeyboard,
 } from '../keyboards.js';
+
+function getCoverLetterFocus(jobId: string): string {
+  const matchDetails = getActivityForJob(jobId, 'matched');
+  if (matchDetails) {
+    try {
+      const details = JSON.parse(matchDetails);
+      if (details.cover_letter_focus) return details.cover_letter_focus;
+    } catch { /* ignore */ }
+  }
+  return 'Allgemeine Passung hervorheben';
+}
 
 function getKeyboardForMethod(jobId: string, method: string | null) {
   switch (method) {
@@ -48,11 +63,25 @@ export function registerEditHandlers(bot: Telegraf): void {
     try {
       await ctx.reply(`📝 Ueberarbeite Anschreiben fuer "${job.title}" mit deinem Feedback...`);
 
-      const newCoverLetter = await generateCoverLetter(job, feedback);
+      const cv = await getStructuredCV();
+      const focus = getCoverLetterFocus(job.id);
+      const newCoverLetter = await generateCoverLetter(job, cv, focus, feedback);
       const wordCount = newCoverLetter.split(/\s+/).length;
       const newVersion = existingApp.version + 1;
 
       updateApplicationCoverLetter(existingApp.id, newCoverLetter, newVersion);
+
+      // Regenerate PDFs
+      let pdfInfo = '';
+      try {
+        const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, newCoverLetter, cv);
+        updateApplicationPdfPaths(existingApp.id, pdfPath, fullPackagePath);
+        pdfInfo = '\n📎 PDFs aktualisiert';
+      } catch (err) {
+        logger.error('PDF regeneration failed', { error: err });
+        pdfInfo = '\n⚠️ PDF Aktualisierung fehlgeschlagen';
+      }
+
       logActivity(job.id, existingApp.id, 'edited', JSON.stringify({
         version: newVersion,
         word_count: wordCount,
@@ -60,7 +89,7 @@ export function registerEditHandlers(bot: Telegraf): void {
       }));
 
       await ctx.reply(
-        `✅ Anschreiben ueberarbeitet (v${newVersion}) — ${wordCount} Woerter\n\nNutze /preview ${jobId} zum Ansehen.`,
+        `✅ Anschreiben ueberarbeitet (v${newVersion}) — ${wordCount} Woerter${pdfInfo}\n\nNutze /preview ${jobId} zum Ansehen.`,
         getKeyboardForMethod(job.id, job.application_method)
       );
     } catch (err) {

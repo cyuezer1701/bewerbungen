@@ -321,6 +321,19 @@ export function updateApplicationCoverLetter(
   `).run(text, version, id);
 }
 
+export function updateApplicationPdfPaths(
+  id: string,
+  pdfPath: string,
+  fullPackagePath: string
+): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE applications SET cover_letter_pdf_path = ?, full_package_pdf_path = ?,
+           status = 'ready', updated_at = datetime('now')
+    WHERE id = ?
+  `).run(pdfPath, fullPackagePath, id);
+}
+
 export function deactivateSearchProfile(id: string): void {
   const db = getDb();
   db.prepare('UPDATE search_profiles SET is_active = 0 WHERE id = ?').run(id);
