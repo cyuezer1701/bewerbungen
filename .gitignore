@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+
+# Database
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Personal data
+data/cv.pdf
+data/cv-structured.json
+data/zeugnisse/
+data/bewerbungen/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,76 @@
+-- AutoBewerber Database Schema
+
+-- Jobs die gefunden wurden
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_id TEXT,
+    source_url TEXT,
+    title TEXT NOT NULL,
+    company TEXT NOT NULL,
+    location TEXT,
+    description TEXT,
+    salary_range TEXT,
+    salary_estimate_min INTEGER,
+    salary_estimate_max INTEGER,
+    salary_estimate_realistic INTEGER,
+    salary_currency TEXT DEFAULT 'CHF',
+    salary_reasoning TEXT,
+    application_method TEXT,
+    application_url TEXT,
+    application_email TEXT,
+    posted_at TEXT,
+    scraped_at TEXT DEFAULT (datetime('now')),
+    match_score INTEGER,
+    match_reasoning TEXT,
+    status TEXT DEFAULT 'new',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Generierte Bewerbungen
+CREATE TABLE IF NOT EXISTS applications (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL REFERENCES jobs(id),
+    cover_letter_text TEXT,
+    cover_letter_pdf_path TEXT,
+    full_package_pdf_path TEXT,
+    version INTEGER DEFAULT 1,
+    feedback TEXT,
+    sent_at TEXT,
+    sent_via TEXT,
+    sent_to TEXT,
+    follow_up_at TEXT,
+    follow_up_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Tracking / Timeline
+CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT REFERENCES jobs(id),
+    application_id TEXT REFERENCES applications(id),
+    action TEXT NOT NULL,
+    details TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Suchprofile
+CREATE TABLE IF NOT EXISTS search_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    keywords TEXT NOT NULL,
+    location TEXT,
+    radius_km INTEGER DEFAULT 50,
+    min_match_score INTEGER DEFAULT 65,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_match_score ON jobs(match_score);
+CREATE INDEX IF NOT EXISTS idx_jobs_source_id ON jobs(source, source_id);
+CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_job_id ON activity_log(job_id);
