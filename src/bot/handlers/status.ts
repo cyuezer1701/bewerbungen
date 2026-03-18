@@ -134,6 +134,38 @@ export function registerStatusHandlers(bot: Telegraf): void {
     await ctx.editMessageReplyMarkup(undefined);
     await ctx.reply(`${labels[newStatus]} fuer "${job.title}" @ ${job.company}`);
   });
+
+  // Callback: Follow-up actions
+  bot.action(/^update_(.+)$/, async (ctx) => {
+    const jobId = ctx.match[1];
+    await ctx.answerCbQuery();
+    await ctx.reply(`Status updaten: /update ${jobId} <status>\nGueltige Status: interview, rejected, offer`);
+  });
+
+  bot.action(/^followup_(.+)$/, async (ctx) => {
+    const jobId = ctx.match[1];
+    await ctx.answerCbQuery();
+    const job = getJobById(jobId);
+    if (!job) return;
+
+    if (job.application_email) {
+      await ctx.reply(`📧 Nachfass E-Mail senden an ${job.application_email}?\nNutze /send ${jobId}`);
+    } else {
+      await ctx.reply(`Nachfassen fuer "${job.title}" bei ${job.company}.\nBewerbungsportal: ${job.application_url || 'nicht verfuegbar'}`);
+    }
+  });
+
+  bot.action(/^archive_(.+)$/, async (ctx) => {
+    const jobId = ctx.match[1];
+    await ctx.answerCbQuery();
+    const job = getJobById(jobId);
+    if (!job) return;
+
+    updateJobStatus(jobId, 'rejected');
+    logActivity(jobId, null, 'status_changed', JSON.stringify({ from: job.status, to: 'rejected', reason: 'archived' }));
+    await ctx.editMessageReplyMarkup(undefined);
+    await ctx.reply(`📁 "${job.title}" bei ${job.company} archiviert (als Absage markiert).`);
+  });
 }
 
 function formatNum(n: number): string {

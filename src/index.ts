@@ -4,7 +4,8 @@ import { initDatabase, closeDatabase } from './db/index.js';
 import { createBot, startBot, stopBot, getBot } from './bot/index.js';
 import { runScrapers } from './scrapers/index.js';
 import { runMatching } from './matching/index.js';
-import { getMatchedNewJobs, getWeeklyStats, getAverageSalary } from './db/queries.js';
+import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDueFollowUp, incrementFollowUpCount, logActivity } from './db/queries.js';
+import { followUpKeyboard } from './bot/keyboards.js';
 import cron from 'node-cron';
 
 function formatNum(n: number): string {
@@ -73,6 +74,23 @@ function main() {
       if (bot) {
         const report = buildDailyReport(jobs.length, matched);
         await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, report);
+      }
+
+      // Step 4: Check follow-up reminders
+      if (bot) {
+        const dueFollowUps = getApplicationsDueFollowUp();
+        for (const app of dueFollowUps) {
+          const reminderNum = app.follow_up_count + 1;
+          let msg: string;
+          if (reminderNum >= 3) {
+            msg = `⏰ Follow-up #${reminderNum}: Noch keine Rueckmeldung fuer "${app.job_title}" bei ${app.job_company}.\nWahrscheinlich eine Absage.`;
+          } else {
+            msg = `⏰ Follow-up #${reminderNum}: Noch keine Rueckmeldung fuer "${app.job_title}" bei ${app.job_company}.`;
+          }
+          await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, msg, followUpKeyboard(app.job_id));
+          incrementFollowUpCount(app.id);
+          logActivity(app.job_id, app.id, 'follow_up', JSON.stringify({ count: reminderNum }));
+        }
       }
     } catch (err) {
       logger.error('Cron job failed', { error: err });

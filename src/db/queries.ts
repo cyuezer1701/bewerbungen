@@ -346,3 +346,27 @@ export function getActivityForJob(jobId: string, action: string): string | null 
   ).get(jobId, action) as { details: string | null } | undefined;
   return row?.details ?? null;
 }
+
+export function getApplicationsDueFollowUp(): Array<ApplicationRow & { job_title: string; job_company: string }> {
+  const db = getDb();
+  return db.prepare(`
+    SELECT a.*, j.title as job_title, j.company as job_company
+    FROM applications a
+    JOIN jobs j ON a.job_id = j.id
+    WHERE a.status = 'sent'
+      AND a.follow_up_at IS NOT NULL
+      AND a.follow_up_at <= datetime('now')
+      AND a.follow_up_count < 3
+  `).all() as Array<ApplicationRow & { job_title: string; job_company: string }>;
+}
+
+export function incrementFollowUpCount(id: string): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE applications
+    SET follow_up_count = follow_up_count + 1,
+        follow_up_at = datetime('now', '+14 days'),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(id);
+}

@@ -7,6 +7,7 @@ import { registerApplyHandlers } from './handlers/apply.js';
 import { registerEditHandlers } from './handlers/edit.js';
 import { registerStatusHandlers } from './handlers/status.js';
 import { registerSearchHandlers } from './handlers/search.js';
+import { registerSendHandlers } from './handlers/send.js';
 
 let bot: Telegraf | null = null;
 
@@ -69,6 +70,7 @@ export function createBot(): Telegraf {
   registerEditHandlers(bot);
   registerStatusHandlers(bot);
   registerSearchHandlers(bot);
+  registerSendHandlers(bot);
 
   return bot;
 }
