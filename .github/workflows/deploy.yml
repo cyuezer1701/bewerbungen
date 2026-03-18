@@ -31,4 +31,5 @@ jobs:
             git pull origin main
             npm ci
             npm run build
+            cd dashboard && npm ci && npm run build && cd ..
             pm2 restart auto-bewerber || pm2 start ecosystem.config.cjs
