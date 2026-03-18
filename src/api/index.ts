@@ -34,7 +34,9 @@ export function startApiServer(): void {
   const dashboardPath = path.resolve(process.cwd(), 'dashboard/dist');
   if (fs.existsSync(dashboardPath)) {
     app.use(express.static(dashboardPath));
-    app.get('*', (_req, res) => {
+    // SPA fallback: serve index.html for all non-API routes
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
       res.sendFile(path.join(dashboardPath, 'index.html'));
     });
   }
