@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, FileText, Search, FolderOpen, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Briefcase, FileText, Search, FolderOpen, Settings, LogOut, BarChart3, Activity } from 'lucide-react';
 import { clearToken } from '../../api/client';
 
 const navItems = [
@@ -9,6 +9,8 @@ const navItems = [
   { to: '/profiles', icon: Search, label: 'Suchprofile' },
   { to: '/documents', icon: FolderOpen, label: 'Dokumente' },
   { to: '/settings', icon: Settings, label: 'Einstellungen' },
+  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/activity', icon: Activity, label: 'Aktivitaeten' },
 ];
 
 export default function Sidebar() {

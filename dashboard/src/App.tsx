@@ -7,19 +7,15 @@ import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import Applications from './pages/Applications';
 import ApplicationEdit from './pages/ApplicationEdit';
+import SearchProfiles from './pages/SearchProfiles';
+import Documents from './pages/Documents';
+import Settings from './pages/Settings';
+import Analytics from './pages/Analytics';
+import ActivityLog from './pages/ActivityLog';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!hasToken()) return <Navigate to="/login" replace />;
   return <>{children}</>;
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-lg p-8 text-center">
-      <h2 className="text-lg font-semibold text-text mb-2">{title}</h2>
-      <p className="text-text-muted">Kommt in der naechsten Phase</p>
-    </div>
-  );
 }
 
 export default function App() {
@@ -39,9 +35,11 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobDetail />} />
           <Route path="/applications" element={<Applications />} />
           <Route path="/applications/:id" element={<ApplicationEdit />} />
-          <Route path="/profiles" element={<Placeholder title="Suchprofile" />} />
-          <Route path="/documents" element={<Placeholder title="Dokumente" />} />
-          <Route path="/settings" element={<Placeholder title="Einstellungen" />} />
+          <Route path="/profiles" element={<SearchProfiles />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/activity" element={<ActivityLog />} />
         </Route>
       </Routes>
     </BrowserRouter>
