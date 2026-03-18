@@ -1,7 +1,8 @@
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
 import { initDatabase, closeDatabase } from './db/index.js';
-import { createBot, startBot, stopBot } from './bot/index.js';
+import { createBot, startBot, stopBot, getBot } from './bot/index.js';
+import { runScrapers } from './scrapers/index.js';
 import cron from 'node-cron';
 
 function main() {
@@ -18,8 +19,21 @@ function main() {
   cron.schedule(config.CRON_SCHEDULE, async () => {
     logger.info('Cron job triggered: starting daily scrape...');
     try {
-      // Will be wired to runScrapers() in Phase 3
-      logger.info('Scraper run placeholder — not yet implemented');
+      const jobs = await runScrapers();
+      const bot = getBot();
+      if (bot && jobs.length > 0) {
+        const message =
+          `🔍 Scraper Report\n\n` +
+          `${jobs.length} neue Jobs gefunden\n\n` +
+          jobs.slice(0, 5).map((j, i) =>
+            `${i + 1}. ${j.title}\n   🏢 ${j.company} | 📍 ${j.location}`
+          ).join('\n\n') +
+          (jobs.length > 5 ? `\n\n...und ${jobs.length - 5} weitere. /jobs fuer Details` : '');
+
+        await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, message);
+      } else if (bot) {
+        await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, '🔍 Scraper Report: Keine neuen Jobs gefunden.');
+      }
     } catch (err) {
       logger.error('Cron job failed', { error: err });
     }
