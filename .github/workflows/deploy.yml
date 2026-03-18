@@ -29,6 +29,6 @@ jobs:
           script: |
             cd /opt/auto-bewerber
             git pull origin main
-            npm ci --production
+            npm ci
             npm run build
             pm2 restart auto-bewerber || pm2 start ecosystem.config.cjs
