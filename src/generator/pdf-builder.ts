@@ -89,8 +89,11 @@ export async function generateCoverLetterPDF(
   cv: StructuredCV,
   outputDir: string
 ): Promise<string> {
-  // Read HTML template
-  const templatePath = path.resolve(__dirname, 'templates', 'cover-letter.html');
+  // Read HTML template (try dist/ first, then src/ for dev mode)
+  let templatePath = path.resolve(__dirname, 'templates', 'cover-letter.html');
+  if (!fs.existsSync(templatePath)) {
+    templatePath = path.resolve(__dirname, '../../src/generator/templates/cover-letter.html');
+  }
   let html = fs.readFileSync(templatePath, 'utf-8');
 
   // Parse the letter text into structured parts

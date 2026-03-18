@@ -26,7 +26,11 @@ export function initDatabase(): void {
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
 
-  const schemaPath = path.resolve(__dirname, 'schema.sql');
+  // Try dist/db first, then src/db (for dev mode with tsx)
+  let schemaPath = path.resolve(__dirname, 'schema.sql');
+  if (!fs.existsSync(schemaPath)) {
+    schemaPath = path.resolve(__dirname, '../../src/db/schema.sql');
+  }
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   _db.exec(schema);
 
