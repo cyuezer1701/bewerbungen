@@ -3,6 +3,10 @@ import { hasToken } from './api/client';
 import Shell from './components/layout/Shell';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Jobs from './pages/Jobs';
+import JobDetail from './pages/JobDetail';
+import Applications from './pages/Applications';
+import ApplicationEdit from './pages/ApplicationEdit';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!hasToken()) return <Navigate to="/login" replace />;
@@ -31,8 +35,10 @@ export default function App() {
           }
         >
           <Route path="/" element={<Dashboard />} />
-          <Route path="/jobs" element={<Placeholder title="Jobs" />} />
-          <Route path="/applications" element={<Placeholder title="Bewerbungen" />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/applications" element={<Applications />} />
+          <Route path="/applications/:id" element={<ApplicationEdit />} />
           <Route path="/profiles" element={<Placeholder title="Suchprofile" />} />
           <Route path="/documents" element={<Placeholder title="Dokumente" />} />
           <Route path="/settings" element={<Placeholder title="Einstellungen" />} />
