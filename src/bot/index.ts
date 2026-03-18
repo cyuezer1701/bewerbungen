@@ -2,6 +2,11 @@ import { Telegraf } from 'telegraf';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { getJobCountByStatus, getRecentJobCount, getTotalApplicationCount } from '../db/queries.js';
+import { registerJobsHandlers } from './handlers/jobs.js';
+import { registerApplyHandlers } from './handlers/apply.js';
+import { registerEditHandlers } from './handlers/edit.js';
+import { registerStatusHandlers } from './handlers/status.js';
+import { registerSearchHandlers } from './handlers/search.js';
 
 let bot: Telegraf | null = null;
 
@@ -57,6 +62,13 @@ export function createBot(): Telegraf {
       ctx.reply('Fehler beim Laden des Status.');
     }
   });
+
+  // Register all handler modules
+  registerJobsHandlers(bot);
+  registerApplyHandlers(bot);
+  registerEditHandlers(bot);
+  registerStatusHandlers(bot);
+  registerSearchHandlers(bot);
 
   return bot;
 }

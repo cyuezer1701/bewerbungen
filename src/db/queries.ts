@@ -264,3 +264,72 @@ export function getTotalApplicationCount(): number {
   const row = db.prepare('SELECT COUNT(*) as count FROM applications').get() as { count: number };
   return row.count;
 }
+
+export function getMatchedNewJobs(minScore: number, limit = 50): JobRow[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM jobs WHERE status = ? AND match_score >= ? ORDER BY match_score DESC, created_at DESC LIMIT ?'
+  ).all('new', minScore, limit) as JobRow[];
+}
+
+export function getWeeklyStats(): { applied: number; interview: number; rejected: number; offer: number } {
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT status, COUNT(*) as count FROM jobs WHERE status IN ('applied', 'interview', 'rejected', 'offer') AND updated_at >= datetime('now', '-7 days') GROUP BY status"
+  ).all() as Array<{ status: string; count: number }>;
+  const stats = { applied: 0, interview: 0, rejected: 0, offer: 0 };
+  for (const row of rows) {
+    if (row.status in stats) {
+      stats[row.status as keyof typeof stats] = row.count;
+    }
+  }
+  return stats;
+}
+
+export function getAverageSalary(): { avg: number; min: number; max: number; currency: string } | null {
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT AVG(salary_estimate_realistic) as avg, MIN(salary_estimate_min) as min, MAX(salary_estimate_max) as max, salary_currency as currency FROM jobs WHERE salary_estimate_realistic IS NOT NULL AND status = 'new'"
+  ).get() as { avg: number | null; min: number | null; max: number | null; currency: string | null };
+  if (!row.avg) return null;
+  return { avg: Math.round(row.avg), min: row.min ?? 0, max: row.max ?? 0, currency: row.currency ?? 'CHF' };
+}
+
+export function updateApplicationSentInfo(
+  id: string,
+  sentVia: string,
+  sentTo: string
+): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE applications
+    SET sent_at = datetime('now'), sent_via = ?, sent_to = ?,
+        follow_up_at = datetime('now', '+14 days'), status = 'sent',
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(sentVia, sentTo, id);
+}
+
+export function updateApplicationCoverLetter(
+  id: string,
+  text: string,
+  version: number
+): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE applications SET cover_letter_text = ?, version = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(text, version, id);
+}
+
+export function deactivateSearchProfile(id: string): void {
+  const db = getDb();
+  db.prepare('UPDATE search_profiles SET is_active = 0 WHERE id = ?').run(id);
+}
+
+export function getActivityForJob(jobId: string, action: string): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT details FROM activity_log WHERE job_id = ? AND action = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(jobId, action) as { details: string | null } | undefined;
+  return row?.details ?? null;
+}
