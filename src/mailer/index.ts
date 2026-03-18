@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
+import { alertMailError } from '../utils/alerter.js';
 import { buildApplicationEmail } from './templates.js';
 import type { JobRow, ApplicationRow } from '../db/queries.js';
 
@@ -69,5 +70,8 @@ export async function sendApplicationEmail(
       const msg = err.message.toLowerCase();
       return !msg.includes('auth') && !msg.includes('invalid') && !msg.includes('rejected');
     },
+  }).catch(async (err) => {
+    await alertMailError(targetEmail, err);
+    throw err;
   });
 }

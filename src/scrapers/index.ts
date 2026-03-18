@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { alertScraperError } from '../utils/alerter.js';
 import { insertJob, getActiveSearchProfiles, logActivity } from '../db/queries.js';
 import { type ScrapedJob, launchStealthBrowser } from './base-scraper.js';
 import { IndeedScraper } from './indeed-scraper.js';
@@ -120,6 +121,7 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
         logger.info(`${scraper.name}: found ${jobs.length} jobs`);
       } catch (err) {
         logger.error(`${scraper.name} scraper failed`, { error: err });
+        await alertScraperError(scraper.name, err);
       }
     }
   } finally {

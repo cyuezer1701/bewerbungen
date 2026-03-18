@@ -6,6 +6,8 @@ import { runScrapers } from './scrapers/index.js';
 import { runMatching } from './matching/index.js';
 import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDueFollowUp, incrementFollowUpCount, logActivity } from './db/queries.js';
 import { followUpKeyboard } from './bot/keyboards.js';
+import { initAlerter, alert } from './utils/alerter.js';
+import { startHealthServer, setLastScrape, buildHealthLine } from './utils/health.js';
 import cron from 'node-cron';
 
 function formatNum(n: number): string {
@@ -41,7 +43,8 @@ function buildDailyReport(scrapedCount: number, matchedCount: number): string {
   }
 
   msg += `📈 Diese Woche: ${weekly.applied} beworben, ${weekly.interview} Interview, ${weekly.rejected} Absagen\n\n`;
-  msg += `Tippe /jobs fuer Details oder /apply <id> zum Bewerben`;
+  msg += buildHealthLine();
+  msg += `\n\nTippe /jobs fuer Details oder /apply <id> zum Bewerben`;
 
   return msg;
 }
@@ -53,17 +56,26 @@ function main() {
   initDatabase();
 
   // Create and start Telegram bot
-  createBot();
+  const bot = createBot();
   startBot();
+
+  // Initialize alerter with Telegram bot
+  initAlerter(config.TELEGRAM_CHAT_ID, (chatId, message) =>
+    bot.telegram.sendMessage(chatId, message)
+  );
+
+  // Start health check server
+  startHealthServer(3333);
 
   // Setup cron job for daily scraping + matching + report
   cron.schedule(config.CRON_SCHEDULE, async () => {
     logger.info('Cron job triggered: starting daily pipeline...');
-    const bot = getBot();
+    const telegramBot = getBot();
 
     try {
       // Step 1: Scrape
       const jobs = await runScrapers();
+      setLastScrape();
       logger.info(`Scraper done: ${jobs.length} new jobs`);
 
       // Step 2: Match
@@ -71,13 +83,13 @@ function main() {
       logger.info(`Matching done: ${matched} jobs scored`);
 
       // Step 3: Send daily report
-      if (bot) {
+      if (telegramBot) {
         const report = buildDailyReport(jobs.length, matched);
-        await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, report);
+        await telegramBot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, report);
       }
 
       // Step 4: Check follow-up reminders
-      if (bot) {
+      if (telegramBot) {
         const dueFollowUps = getApplicationsDueFollowUp();
         for (const app of dueFollowUps) {
           const reminderNum = app.follow_up_count + 1;
@@ -87,19 +99,14 @@ function main() {
           } else {
             msg = `⏰ Follow-up #${reminderNum}: Noch keine Rueckmeldung fuer "${app.job_title}" bei ${app.job_company}.`;
           }
-          await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, msg, followUpKeyboard(app.job_id));
+          await telegramBot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, msg, followUpKeyboard(app.job_id));
           incrementFollowUpCount(app.id);
           logActivity(app.job_id, app.id, 'follow_up', JSON.stringify({ count: reminderNum }));
         }
       }
     } catch (err) {
       logger.error('Cron job failed', { error: err });
-      if (bot) {
-        await bot.telegram.sendMessage(
-          config.TELEGRAM_CHAT_ID,
-          `⚠️ Cron Job Fehler: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`
-        ).catch(() => {});
-      }
+      await alert(`Cron Job fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
     }
   });
 
@@ -117,6 +124,19 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// Global error handlers with Telegram alerts
+process.on('uncaughtException', async (err) => {
+  logger.error('Uncaught exception', { error: err });
+  await alert(`Uncaught Exception: ${err.message}`).catch(() => {});
+  shutdown();
+});
+
+process.on('unhandledRejection', async (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  logger.error('Unhandled rejection', { error: reason });
+  await alert(`Unhandled Rejection: ${msg}`).catch(() => {});
+});
 
 try {
   main();
