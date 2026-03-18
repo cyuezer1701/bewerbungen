@@ -3,6 +3,7 @@ import { logger } from './utils/logger.js';
 import { initDatabase, closeDatabase } from './db/index.js';
 import { createBot, startBot, stopBot, getBot } from './bot/index.js';
 import { runScrapers } from './scrapers/index.js';
+import { runMatching } from './matching/index.js';
 import cron from 'node-cron';
 
 function main() {
@@ -33,6 +34,15 @@ function main() {
         await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, message);
       } else if (bot) {
         await bot.telegram.sendMessage(config.TELEGRAM_CHAT_ID, '🔍 Scraper Report: Keine neuen Jobs gefunden.');
+      }
+
+      // Run matching on new jobs
+      const matched = await runMatching();
+      if (bot && matched > 0) {
+        await bot.telegram.sendMessage(
+          config.TELEGRAM_CHAT_ID,
+          `🎯 Matching: ${matched} Jobs bewertet. /jobs fuer Details.`
+        );
       }
     } catch (err) {
       logger.error('Cron job failed', { error: err });

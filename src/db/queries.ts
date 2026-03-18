@@ -116,6 +116,11 @@ export function getJobBySourceId(source: string, sourceId: string): JobRow | und
   return db.prepare('SELECT * FROM jobs WHERE source = ? AND source_id = ?').get(source, sourceId) as JobRow | undefined;
 }
 
+export function getUnmatchedJobs(limit = 50): JobRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM jobs WHERE status = ? AND match_score IS NULL ORDER BY created_at DESC LIMIT ?').all('new', limit) as JobRow[];
+}
+
 export function getNewJobs(limit = 50): JobRow[] {
   const db = getDb();
   return db.prepare('SELECT * FROM jobs WHERE status = ? ORDER BY match_score DESC, created_at DESC LIMIT ?').all('new', limit) as JobRow[];
