@@ -7,7 +7,9 @@ import { runMatching } from './matching/index.js';
 import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDueFollowUp, incrementFollowUpCount, logActivity } from './db/queries.js';
 import { followUpKeyboard } from './bot/keyboards.js';
 import { initAlerter, alert } from './utils/alerter.js';
-import { startHealthServer, setLastScrape, buildHealthLine } from './utils/health.js';
+import { setLastScrape, buildHealthLine } from './utils/health.js';
+import { initDefaultSettings } from './db/settings.js';
+import { startApiServer } from './api/index.js';
 import cron from 'node-cron';
 
 function formatNum(n: number): string {
@@ -52,8 +54,9 @@ function buildDailyReport(scrapedCount: number, matchedCount: number): string {
 function main() {
   logger.info('AutoBewerber starting...');
 
-  // Initialize database
+  // Initialize database + settings
   initDatabase();
+  initDefaultSettings();
 
   // Create and start Telegram bot
   const bot = createBot();
@@ -64,8 +67,8 @@ function main() {
     bot.telegram.sendMessage(chatId, message)
   );
 
-  // Start health check server
-  startHealthServer(3333);
+  // Start REST API server (includes /api/health, replaces standalone health server)
+  startApiServer();
 
   // Setup cron job for daily scraping + matching + report
   cron.schedule(config.CRON_SCHEDULE, async () => {

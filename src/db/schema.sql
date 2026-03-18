@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS search_profiles (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- App Settings (Key-Value Store)
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    encrypted INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_match_score ON jobs(match_score);
 CREATE INDEX IF NOT EXISTS idx_jobs_source_id ON jobs(source, source_id);

@@ -38,6 +38,11 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   CRON_SCHEDULE: z.string().default('0 7 * * *'),
   MAX_JOBS_PER_DAY: z.coerce.number().default(20),
+
+  // Dashboard API
+  DASHBOARD_PORT: z.coerce.number().default(3333),
+  DASHBOARD_API_TOKEN: z.string().default('change-me-to-a-random-string'),
+  ENCRYPTION_KEY: z.string().default('0000000000000000000000000000000000000000000000000000000000000000'),
 });
 
 function loadConfig() {
