@@ -86,11 +86,16 @@ function deduplicateJobs(jobs: ScrapedJob[]): ScrapedJob[] {
 export async function runScrapers(): Promise<ScrapedJob[]> {
   logger.info('Starting scraper run...');
 
-  const scrapers: BaseScraper[] = [
-    new IndeedScraper(),
-    new LinkedInScraper(),
-    new JobsChScraper(),
-  ];
+  // Build scraper list based on settings (Indeed/LinkedIn disabled by default — too aggressive blocking)
+  const scrapers: BaseScraper[] = [];
+  if (getSetting('scraper_indeed_enabled') === 'true') scrapers.push(new IndeedScraper());
+  if (getSetting('scraper_linkedin_enabled') === 'true') scrapers.push(new LinkedInScraper());
+  if (getSetting('scraper_jobsch_enabled') !== 'false') scrapers.push(new JobsChScraper());
+
+  if (scrapers.length === 0) {
+    logger.warn('No scrapers enabled');
+    return [];
+  }
 
   // Collect keywords from settings DB (fallback to config)
   const settingsKeywords = getSetting('search_keywords');
