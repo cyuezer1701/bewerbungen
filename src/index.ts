@@ -10,6 +10,7 @@ import { initAlerter, alert } from './utils/alerter.js';
 import { setLastScrape, buildHealthLine } from './utils/health.js';
 import { initDefaultSettings } from './db/settings.js';
 import { startApiServer } from './api/index.js';
+import { testTag } from './utils/test-mode.js';
 import cron from 'node-cron';
 
 function formatNum(n: number): string {
@@ -17,11 +18,12 @@ function formatNum(n: number): string {
 }
 
 function buildDailyReport(scrapedCount: number, matchedCount: number): string {
+  const tag = testTag();
   const matchedJobs = getMatchedNewJobs(config.JOB_MIN_MATCH_SCORE, 5);
   const weekly = getWeeklyStats();
   const salary = getAverageSalary();
 
-  let msg = `📊 AutoBewerber Daily Report\n\n`;
+  let msg = `${tag}📊 AutoBewerber Daily Report\n\n`;
   msg += `🔍 ${scrapedCount} neue Jobs gefunden\n`;
   msg += `⭐ ${matchedCount} mit Match Score > ${config.JOB_MIN_MATCH_SCORE}%\n`;
 

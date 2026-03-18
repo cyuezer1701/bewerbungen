@@ -8,6 +8,10 @@ import { registerEditHandlers } from './handlers/edit.js';
 import { registerStatusHandlers } from './handlers/status.js';
 import { registerSearchHandlers } from './handlers/search.js';
 import { registerSendHandlers } from './handlers/send.js';
+import { isTestMode, toggleTestMode, getTestEmail, testTag } from '../utils/test-mode.js';
+import { runScrapers } from '../scrapers/index.js';
+import { runMatching } from '../matching/index.js';
+import { getNewJobs } from '../db/queries.js';
 
 let bot: Telegraf | null = null;
 
@@ -71,6 +75,52 @@ export function createBot(): Telegraf {
   registerStatusHandlers(bot);
   registerSearchHandlers(bot);
   registerSendHandlers(bot);
+
+  // /testmode — toggle test mode
+  bot.command('testmode', (ctx) => {
+    const newState = toggleTestMode();
+    const email = getTestEmail();
+    if (newState) {
+      ctx.reply(`🧪 Test Mode aktiviert.\nMails gehen an: ${email || '(keine Test-Email konfiguriert — setze test_mode_email in Settings)'}`);
+    } else {
+      ctx.reply('Test Mode deaktiviert. System ist jetzt im Live-Betrieb.');
+    }
+  });
+
+  // /testrun — full pipeline test
+  bot.command('testrun', async (ctx) => {
+    if (!isTestMode()) {
+      return ctx.reply('Test Mode ist nicht aktiv. Aktiviere ihn zuerst mit /testmode');
+    }
+    try {
+      await ctx.reply('🧪 Starte Test-Durchlauf: Scrape → Match → Report...');
+      const jobs = await runScrapers();
+      await ctx.reply(`🧪 Scrape abgeschlossen: ${jobs.length} neue Jobs gefunden`);
+      const matched = await runMatching();
+      await ctx.reply(`🧪 Matching abgeschlossen: ${matched} Jobs bewertet`);
+      const topJobs = getNewJobs(3);
+      if (topJobs.length > 0) {
+        await ctx.reply(`🧪 Top Match: "${topJobs[0].title}" @ ${topJobs[0].company} (Score: ${topJobs[0].match_score})\n\nNutze /apply ${topJobs[0].id} um eine Test-Bewerbung zu erstellen.`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Fehler';
+      ctx.reply(`🧪 Test-Durchlauf fehlgeschlagen: ${msg}`);
+    }
+  });
+
+  // /scrape — manual scrape trigger
+  bot.command('scrape', async (ctx) => {
+    const tag = testTag();
+    await ctx.reply(`${tag}Starte manuellen Scrape...`);
+    try {
+      const jobs = await runScrapers();
+      const matched = await runMatching();
+      await ctx.reply(`${tag}Scrape abgeschlossen: ${jobs.length} Jobs gefunden, ${matched} bewertet. /jobs fuer Details.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Fehler';
+      ctx.reply(`${tag}Scrape fehlgeschlagen: ${msg}`);
+    }
+  });
 
   return bot;
 }

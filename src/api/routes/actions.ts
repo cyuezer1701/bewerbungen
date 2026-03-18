@@ -58,3 +58,13 @@ actionsRouter.get('/logs', (_req, res) => {
   const lines = content.trim().split('\n').slice(-100);
   res.json({ lines });
 });
+
+// DELETE /api/test-data — Clean up test applications
+// curl -X DELETE -H "Authorization: Bearer TOKEN" http://localhost:3333/api/test-data
+actionsRouter.delete('/test-data', (_req, res) => {
+  const db = getDb();
+  const result = db.prepare("DELETE FROM applications WHERE sent_via LIKE '%_test'").run();
+  const logResult = db.prepare("DELETE FROM activity_log WHERE details LIKE '%\"test\":true%'").run();
+  logger.info(`Test data cleanup: ${result.changes} applications, ${logResult.changes} log entries deleted`);
+  res.json({ ok: true, applicationsDeleted: result.changes, logsDeleted: logResult.changes });
+});

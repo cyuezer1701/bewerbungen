@@ -73,6 +73,8 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   salary_currency_default: { value: 'CHF', encrypted: false },
   dashboard_port: { value: String(config.DASHBOARD_PORT), encrypted: false },
   dashboard_api_token: { value: config.DASHBOARD_API_TOKEN, encrypted: true },
+  test_mode: { value: 'false', encrypted: false },
+  test_mode_email: { value: '', encrypted: false },
 };
 
 export function initDefaultSettings(): void {

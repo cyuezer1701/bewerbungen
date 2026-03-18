@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { config } from '../config.js';
 import { logger } from './logger.js';
 import { getDb } from '../db/index.js';
+import { isTestMode } from './test-mode.js';
 
 const startTime = Date.now();
 let lastScrapeAt: string | null = null;
@@ -42,6 +43,7 @@ export function getHealthData(): Record<string, unknown> {
 
   return {
     status: 'ok',
+    testMode: isTestMode(),
     uptime: `${uptimeDays}d ${remainingHours}h`,
     uptimeMs,
     lastScrape: lastScrapeAt,

@@ -204,6 +204,14 @@ export default function SettingsPage() {
     ),
     7: ( // System
       <div className="space-y-4">
+        {/* Test Mode */}
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-warning">🧪 Test Mode</h3>
+          <Toggle label="Test Mode aktivieren" settingKey="test_mode" />
+          <Field label="Test E-Mail Adresse" settingKey="test_mode_email" placeholder="deine@email.com" />
+          <p className="text-xs text-text-muted">Im Test Mode werden alle E-Mails an die Test-Adresse umgeleitet. Keine echten Bewerbungen.</p>
+        </div>
+
         <Field label="Claude Model" settingKey="claude_model" />
         <NumberField label="Max parallele API Calls" settingKey="claude_max_parallel" min={1} max={20} />
         <Field label="Dashboard Port" settingKey="dashboard_port" />

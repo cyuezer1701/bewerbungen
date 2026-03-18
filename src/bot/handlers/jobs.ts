@@ -3,12 +3,14 @@ import { getNewJobs, getJobById, updateJobStatus, logActivity, getActivityForJob
 import { jobListKeyboard } from '../keyboards.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config.js';
+import { testTag } from '../../utils/test-mode.js';
 
 function formatJobCard(job: ReturnType<typeof getJobById>, index?: number): string {
   if (!job) return '';
+  const tag = testTag();
 
   const score = job.match_score ?? 0;
-  const prefix = index !== undefined ? `🎯 Job #${index + 1} — Match: ${score}%` : `🎯 Match: ${score}%`;
+  const prefix = index !== undefined ? `${tag}🎯 Job #${index + 1} — Match: ${score}%` : `${tag}🎯 Match: ${score}%`;
 
   // Salary formatting
   let salaryLine = '💰 Nicht geschaetzt';

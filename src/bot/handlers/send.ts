@@ -1,5 +1,6 @@
 import type { Telegraf } from 'telegraf';
 import { logger } from '../../utils/logger.js';
+import { testTag, testSentVia } from '../../utils/test-mode.js';
 import {
   getJobById,
   getApplicationByJobId,
@@ -20,7 +21,6 @@ async function handleSend(
     return;
   }
 
-  // Check application method supports email
   if (job.application_method === 'portal') {
     await replyFn(
       `Job "${job.title}" ist nur per Portal zu bewerben.\n` +
@@ -47,24 +47,36 @@ async function handleSend(
   }
 
   try {
-    await replyFn(`📧 Sende Bewerbung an ${targetEmail}...`);
+    const tag = testTag();
+    await replyFn(`${tag}📧 Sende Bewerbung an ${targetEmail}...`);
 
-    await sendApplicationEmail(job, app, targetEmail);
+    const { actualRecipient, testMode } = await sendApplicationEmail(job, app, targetEmail);
 
-    // Update tracking
-    updateApplicationSentInfo(app.id, 'email', targetEmail);
+    const sentVia = testSentVia('email');
+    updateApplicationSentInfo(app.id, sentVia, actualRecipient);
     updateJobStatus(jobId, 'applied');
     logActivity(jobId, app.id, 'sent', JSON.stringify({
-      sent_via: 'email',
-      sent_to: targetEmail,
+      sent_via: sentVia,
+      sent_to: actualRecipient,
+      original_target: targetEmail,
+      test: testMode,
     }));
 
-    await replyFn(
-      `📧 Bewerbung an ${targetEmail} gesendet!\n` +
-      `📎 Anhang: ${app.full_package_pdf_path ? 'Komplett Paket' : 'Anschreiben'}\n` +
-      `📅 Follow-up Reminder in 14 Tagen.`,
-      afterSendKeyboard(jobId)
-    );
+    if (testMode) {
+      await replyFn(
+        `${tag}📧 TEST: Mail an ${actualRecipient} statt an ${targetEmail}\n` +
+        `📎 Anhang: ${app.full_package_pdf_path ? 'Komplett Paket' : 'Anschreiben'}\n` +
+        `📅 Follow-up Reminder in 14 Tagen.`,
+        afterSendKeyboard(jobId)
+      );
+    } else {
+      await replyFn(
+        `📧 Bewerbung an ${targetEmail} gesendet!\n` +
+        `📎 Anhang: ${app.full_package_pdf_path ? 'Komplett Paket' : 'Anschreiben'}\n` +
+        `📅 Follow-up Reminder in 14 Tagen.`,
+        afterSendKeyboard(jobId)
+      );
+    }
   } catch (err) {
     logger.error('Failed to send application email', { error: err });
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -73,16 +85,12 @@ async function handleSend(
 }
 
 export function registerSendHandlers(bot: Telegraf): void {
-  // /send <id> command
   bot.command('send', async (ctx) => {
     const jobId = ctx.message.text.split(/\s+/)[1];
-    if (!jobId) {
-      return ctx.reply('Usage: /send <job-id>');
-    }
+    if (!jobId) return ctx.reply('Usage: /send <job-id>');
     await handleSend(jobId, (text, extra) => ctx.reply(text, extra as never));
   });
 
-  // Callback: Send (from inline button)
   bot.action(/^send_(.+)$/, async (ctx) => {
     const jobId = ctx.match[1];
     await ctx.answerCbQuery();

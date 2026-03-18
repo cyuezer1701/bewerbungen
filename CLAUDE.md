@@ -1205,3 +1205,54 @@ Falls Scraper blockiert werden:
 ## Starte die Implementierung mit Phase 1 und arbeite dich sequenziell durch.
 ## Teste nach jeder Phase bevor du zur nächsten gehst.
 ## Committe nach jeder funktionalen Phase.
+
+---
+
+## Test Mode / Dry Run
+
+### Uebersicht
+
+Test Mode erlaubt das sichere Testen des kompletten Flows ohne echte Bewerbungen zu versenden.
+
+### Settings
+
+```
+test_mode: boolean (Default: false)
+test_mode_email: string (Ziel-Adresse fuer Test-Mails)
+```
+
+### Verhalten im Test Mode
+
+**E-Mail Versand:**
+- ALLE Empfaenger-Adressen werden durch `test_mode_email` ersetzt
+- Betreff erhaelt Prefix `[TEST]`
+- Body erhaelt Warning-Banner mit dem Original-Empfaenger
+- PDFs bleiben identisch (echte Anschreiben + CV + Zeugnisse)
+- Log: "TEST MODE: Mail umgeleitet von {firma_email} an {test_email}"
+
+**Telegram Bot:**
+- Alle Nachrichten erhalten Prefix 🧪
+- Daily Report: "🧪 📊 AutoBewerber Daily Report"
+- Nach Versand: "🧪 TEST: Mail an {test_email} statt {firma_email}"
+- `/testmode` — Toggle Test Mode an/aus
+- `/testrun` — Kompletter Durchlauf: Scrape → Match → Report
+- `/scrape` — Manueller Scraper-Durchlauf
+
+**Dashboard:**
+- Gelber Banner oben: "🧪 TEST MODE AKTIV"
+- Settings → System Tab: Test Mode Toggle + Test E-Mail Input
+
+**Datenbank:**
+- `sent_via` wird als "email_test" oder "portal_test" gespeichert
+- `activity_log.details` enthaelt `{test: true}`
+- `DELETE /api/test-data` loescht alle Test-Bewerbungen
+
+### Scraper im Test Mode
+
+Scraper laufen normal (echte Jobs). Test Mode betrifft NUR den Versand.
+
+### Test-Daten aufraeumen
+
+```bash
+curl -X DELETE -H "Authorization: Bearer TOKEN" http://localhost:3333/api/test-data
+```
