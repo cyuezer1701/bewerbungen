@@ -130,10 +130,14 @@ export async function generateCoverLetterPDF(
     .replace('{{inhalt}}', parts.inhalt);
 
   // Generate PDF with Puppeteer
-  const browser = await puppeteer.launch({
+  const launchOpts: Record<string, unknown> = {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-  });
+  };
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  const browser = await puppeteer.launch(launchOpts);
 
   try {
     const page = await browser.newPage();

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { alertScraperError } from '../utils/alerter.js';
+import { getSetting } from '../db/settings.js';
 import { insertJob, getActiveSearchProfiles, logActivity } from '../db/queries.js';
 import { type ScrapedJob, launchStealthBrowser } from './base-scraper.js';
 import { IndeedScraper } from './indeed-scraper.js';
@@ -91,12 +92,13 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
     new JobsChScraper(),
   ];
 
-  // Collect keywords from config + active search profiles
-  const defaultKeywords = config.JOB_SEARCH_KEYWORDS.split(',').map((k) => k.trim());
+  // Collect keywords from settings DB (fallback to config)
+  const settingsKeywords = getSetting('search_keywords');
+  const defaultKeywords = (settingsKeywords || config.JOB_SEARCH_KEYWORDS).split(',').map((k) => k.trim());
   const profiles = getActiveSearchProfiles();
   const profileKeywords = profiles.flatMap((p) => p.keywords.split(',').map((k) => k.trim()));
   const allKeywords = [...new Set([...defaultKeywords, ...profileKeywords])];
-  const location = config.JOB_SEARCH_LOCATION;
+  const location = getSetting('search_location') || config.JOB_SEARCH_LOCATION;
 
   logger.info(`Scraping with keywords: ${allKeywords.join(', ')}`);
   logger.info(`Location: ${location}`);

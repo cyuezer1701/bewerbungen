@@ -115,6 +115,26 @@ export function getRandomUserAgent(): string {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
+const BROWSER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--window-size=1920,1080',
+];
+
+function getBrowserOptions() {
+  const opts: Record<string, unknown> = {
+    headless: true,
+    args: BROWSER_ARGS,
+  };
+  // Use system Chromium if PUPPETEER_EXECUTABLE_PATH is set (e.g. on ARM64 VPS)
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  return opts;
+}
+
 export async function launchStealthBrowser(): Promise<Browser> {
   // Try to use puppeteer-extra with stealth, fall back to plain puppeteer
   try {
@@ -124,16 +144,7 @@ export async function launchStealthBrowser(): Promise<Browser> {
     const StealthPlugin = require('puppeteer-extra-plugin-stealth');
     puppeteerExtra.use(StealthPlugin());
 
-    const browser = await puppeteerExtra.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--window-size=1920,1080',
-      ],
-    });
+    const browser = await puppeteerExtra.launch(getBrowserOptions());
     logger.info('Stealth browser launched');
     return browser as unknown as Browser;
   } catch (err) {
@@ -141,16 +152,7 @@ export async function launchStealthBrowser(): Promise<Browser> {
       error: err instanceof Error ? err.message : err,
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--window-size=1920,1080',
-      ],
-    });
+    const browser = await puppeteer.launch(getBrowserOptions());
     logger.info('Plain browser launched');
     return browser;
   }
