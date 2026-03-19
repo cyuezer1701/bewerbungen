@@ -56,7 +56,7 @@ export default function Jobs() {
 
   const fetchJobs = useCallback(async () => {
     const params = new URLSearchParams({
-      page: String(page), limit: String(limit), sort, order, min_score: '85',
+      page: String(page), limit: String(limit), sort, order, min_score: '70',
     });
     if (status !== 'all') params.set('status', status);
     if (search) params.set('search', search);
