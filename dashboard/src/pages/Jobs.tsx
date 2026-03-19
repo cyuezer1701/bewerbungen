@@ -47,7 +47,7 @@ export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('all');
+  const [status, setStatus] = useState('new');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('match_score');
   const [order, setOrder] = useState<'ASC' | 'DESC'>('DESC');
