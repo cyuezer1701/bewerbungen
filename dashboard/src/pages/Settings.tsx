@@ -189,6 +189,11 @@ export default function SettingsPage() {
           {f('Ort', 'sender_address_city')}
         </div>
         {f('Land', 'sender_address_country')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {f('Kuendigungsfrist', 'notice_period')}
+          {f('Verfuegbar ab', 'sender_available_from')}
+        </div>
+        <p className="text-xs text-text-muted">Kuendigungsfrist ist nur fuer deine Referenz. Im Anschreiben steht nur "Verfuegbar ab".</p>
         {settings.sender_name && (
           <div className="bg-navy border border-border rounded p-4 text-sm text-text-muted">
             <p className="font-medium text-text">{settings.sender_name}</p>
