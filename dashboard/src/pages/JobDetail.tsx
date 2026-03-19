@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiGet, apiPost, apiPatch } from '../api/client';
+import { apiGet, apiPost, apiPatch, apiDownload } from '../api/client';
 import { ArrowLeft, ExternalLink, RefreshCw, Send, FileText, Building2, Search, Save } from 'lucide-react';
 
 interface Job {
@@ -150,10 +150,10 @@ export default function JobDetail() {
                     Bearbeiten
                   </button>
                   {app.cover_letter_pdf_path && (
-                    <a href={`/api/applications/${app.id}/pdf?type=komplett`}
+                    <button onClick={() => apiDownload(`/applications/${app.id}/pdf?type=komplett`, `bewerbung_${job?.company || 'job'}.pdf`)}
                       className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
                       PDF Download
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>

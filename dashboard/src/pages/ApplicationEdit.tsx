@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiGet, apiPatch, apiPost } from '../api/client';
+import { apiGet, apiPatch, apiPost, apiDownload } from '../api/client';
 import { ArrowLeft, RefreshCw, Download, Send, ExternalLink, Save, Shield, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface Application {
@@ -199,10 +199,10 @@ export default function ApplicationEdit() {
               <Shield size={14} className={factChecking ? 'animate-spin' : ''} /> {factChecking ? 'Pruefe...' : 'Faktencheck'}
             </button>
             {app.full_package_pdf_path && (
-              <a href={`/api/applications/${app.id}/pdf?type=komplett`}
+              <button onClick={() => apiDownload(`/applications/${app.id}/pdf?type=komplett`, `bewerbung_${app.job_company || 'job'}.pdf`)}
                 className="flex items-center gap-1 bg-card border border-border text-text px-4 py-2 rounded text-sm hover:bg-navy">
                 <Download size={14} /> PDF herunterladen
-              </a>
+              </button>
             )}
           </div>
 

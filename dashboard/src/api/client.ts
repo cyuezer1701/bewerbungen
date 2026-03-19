@@ -84,3 +84,18 @@ export async function apiPut<T = unknown>(path: string, body: unknown): Promise<
 export async function apiDelete<T = unknown>(path: string): Promise<T> {
   return api<T>(path, { method: 'DELETE' });
 }
+
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
