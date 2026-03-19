@@ -112,14 +112,21 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
     browser = await launchStealthBrowser();
 
     // Run scrapers sequentially (share browser, reduce detection risk)
+    // Global job limit shared across all scrapers
+    const globalMax = config.MAX_JOBS_PER_DAY;
     for (const scraper of scrapers) {
+      if (allJobs.length >= globalMax) {
+        logger.info(`Global job limit (${globalMax}) reached, skipping ${scraper.name}`);
+        break;
+      }
       try {
-        logger.info(`Running ${scraper.name} scraper...`);
+        const remaining = globalMax - allJobs.length;
+        logger.info(`Running ${scraper.name} scraper... (${remaining} slots remaining)`);
         const jobs = await scraper.scrape(
           allKeywords,
           location,
           browser,
-          config.MAX_JOBS_PER_DAY
+          remaining
         );
         allJobs.push(...jobs);
         logger.info(`${scraper.name}: found ${jobs.length} jobs`);

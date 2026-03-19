@@ -19,7 +19,8 @@ function formatNum(n: number): string {
 
 function buildDailyReport(scrapedCount: number, matchedCount: number): string {
   const tag = testTag();
-  const matchedJobs = getMatchedNewJobs(config.JOB_MIN_MATCH_SCORE, 5);
+  const minScore = parseInt(getSetting('min_match_score') || '85', 10);
+  const matchedJobs = getMatchedNewJobs(minScore, 5);
   const weekly = getWeeklyStats();
   const salary = getAverageSalary();
 

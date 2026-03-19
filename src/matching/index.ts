@@ -56,7 +56,9 @@ export async function runMatching(): Promise<number> {
   }
 
   let scored = 0;
-  const scoringPromises = jobs.map(async (job) => {
+
+  // Score sequentially to avoid Claude API rate limits (30k tokens/min)
+  for (const job of jobs) {
     try {
       let result: JobMatchResult | RecruiterAssessment;
 
@@ -109,7 +111,7 @@ export async function runMatching(): Promise<number> {
           } : {}),
         }));
         scored++;
-        return;
+        continue;
       }
 
       // Update status based on recommendation and score
@@ -143,9 +145,12 @@ export async function runMatching(): Promise<number> {
     } catch (err) {
       logger.error(`Failed to score job "${job.title}" at ${job.company}`, { error: err });
     }
-  });
 
-  await Promise.all(scoringPromises);
+    // Wait between API calls to respect rate limits
+    if (scored < jobs.length) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
 
   logger.info(`Matching complete: ${scored}/${jobs.length} jobs scored${useRecruiter ? ' (AI Recruiter)' : ''}`);
   return scored;

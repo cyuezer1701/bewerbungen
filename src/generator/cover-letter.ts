@@ -177,7 +177,7 @@ STRIKTE VERBOTE:
 - KEINE Aufzaehlungszeichen oder Bullet Points
 - KEINE Emojis
 - NICHTS ERFINDEN: Keine Zahlen, Projekte oder Erfahrungen die nicht im CV stehen
-- Der Gesamttext (alle 4 Absaetze) MUSS 180-280 Woerter haben. Halte dich kurz.
+- Der Gesamttext (alle 4 Absaetze) MUSS 150-200 Woerter haben. MAXIMAL 200 Woerter. Das Anschreiben MUSS auf EINE A4-Seite passen inkl. Absender, Empfaenger, Datum, Betreff und Gruss. Kuerzer ist besser.
 
 SPRACHE:
 - Deutsch, Schweizer Stil

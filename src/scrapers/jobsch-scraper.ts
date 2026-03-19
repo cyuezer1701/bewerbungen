@@ -29,7 +29,7 @@ export class JobsChScraper extends BaseScraper {
         for (const keyword of keywords) {
           if (jobs.length >= maxJobs) break;
 
-          const searchUrl = `https://www.jobs.ch/en/vacancies/?term=${encodeURIComponent(keyword)}&location=${encodeURIComponent(loc)}`;
+          const searchUrl = `https://www.jobs.ch/en/vacancies/?term=${encodeURIComponent(keyword)}&location=${encodeURIComponent(loc)}&sort=date`;
           logger.info(`jobs.ch: searching "${keyword}" in ${loc}`);
 
           const navigated = await this.safeGoto(page, searchUrl, {

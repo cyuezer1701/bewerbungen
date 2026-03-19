@@ -4,6 +4,7 @@ import { jobListKeyboard } from '../keyboards.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config.js';
 import { testTag } from '../../utils/test-mode.js';
+import { getSetting } from '../../db/settings.js';
 
 /** Truncate a field and strip scraped junk (jobs.ch sidebar text etc.) */
 function cleanField(s: string, maxLen: number): string {
@@ -96,7 +97,8 @@ export function registerJobsHandlers(bot: Telegraf): void {
   // /jobs command
   bot.command('jobs', async (ctx) => {
     try {
-      const jobs = getNewJobs(10);
+      const minScore = parseInt(getSetting('min_match_score') || '85', 10);
+      const jobs = getNewJobs(10, minScore);
 
       if (jobs.length === 0) {
         return ctx.reply('Keine neuen Jobs vorhanden. Warte auf den naechsten Scraper Lauf oder starte manuell mit /scrape.');

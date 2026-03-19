@@ -163,8 +163,11 @@ export function getUnmatchedJobs(limit = 50): JobRow[] {
   return db.prepare('SELECT * FROM jobs WHERE status = ? AND match_score IS NULL ORDER BY created_at DESC LIMIT ?').all('new', limit) as JobRow[];
 }
 
-export function getNewJobs(limit = 50): JobRow[] {
+export function getNewJobs(limit = 50, minScore?: number): JobRow[] {
   const db = getDb();
+  if (minScore != null) {
+    return db.prepare('SELECT * FROM jobs WHERE status = ? AND match_score >= ? ORDER BY match_score DESC, created_at DESC LIMIT ?').all('new', minScore, limit) as JobRow[];
+  }
   return db.prepare('SELECT * FROM jobs WHERE status = ? ORDER BY match_score DESC, created_at DESC LIMIT ?').all('new', limit) as JobRow[];
 }
 
