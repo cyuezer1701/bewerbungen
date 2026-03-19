@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiGet, apiPatch, apiPost } from '../api/client';
-import { ArrowLeft, RefreshCw, Download, Send, ExternalLink, Save } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Download, Send, ExternalLink, Save, Shield, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface Application {
   id: string; job_id: string; cover_letter_text: string | null;
@@ -16,6 +16,12 @@ interface Job {
   salary_estimate_realistic: number | null; salary_currency: string;
   application_method: string | null; application_url: string | null;
   application_email: string | null;
+}
+
+interface HumanScore {
+  score: number;
+  details: string;
+  flaggedPatterns: string[];
 }
 
 function formatNum(n: number): string {
@@ -33,6 +39,8 @@ export default function ApplicationEdit() {
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [humanScore, setHumanScore] = useState<HumanScore | null>(null);
+  const [humanizing, setHumanizing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -42,6 +50,7 @@ export default function ApplicationEdit() {
       // Fetch job details
       const jobId = (a as unknown as { job_id: string }).job_id;
       if (jobId) apiGet<Job>(`/jobs/${jobId}`).then(setJob).catch(() => {});
+      apiGet<HumanScore>(`/applications/${id}/human-score`).then(setHumanScore).catch(() => {});
     }).catch(() => navigate('/applications'));
   }, [id, navigate]);
 
@@ -82,7 +91,21 @@ export default function ApplicationEdit() {
     setApp(updated);
   }
 
+  async function handleHumanize() {
+    setHumanizing(true);
+    try {
+      await apiPost<{ report: string; version: number }>(`/applications/${id}/humanize`);
+      const updated = await apiGet<Application>(`/applications/${id}`);
+      setApp(updated);
+      setText(updated.cover_letter_text || '');
+      // Refresh human score
+      apiGet<HumanScore>(`/applications/${id}/human-score`).then(setHumanScore).catch(() => {});
+    } finally { setHumanizing(false); }
+  }
+
   const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const scoreColor = humanScore ? (humanScore.score >= 70 ? 'text-accent' : humanScore.score >= 50 ? 'text-warning' : 'text-danger') : '';
+  const scoreBg = humanScore ? (humanScore.score >= 70 ? 'bg-accent/20' : humanScore.score >= 50 ? 'bg-warning/20' : 'bg-danger/20') : '';
 
   return (
     <div className="space-y-4">
@@ -99,9 +122,16 @@ export default function ApplicationEdit() {
                 Anschreiben v{app.version}
                 {app.sent_at && <span className="ml-2 text-accent text-xs">Gesendet</span>}
               </h2>
-              <span className={`text-xs font-mono ${wordCount >= 250 && wordCount <= 350 ? 'text-accent' : 'text-warning'}`}>
-                {wordCount} Woerter
-              </span>
+              <div className="flex items-center gap-3">
+                {humanScore && (
+                  <span className={`flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${scoreBg} ${scoreColor}`}>
+                    <Shield size={12} /> {humanScore.score}
+                  </span>
+                )}
+                <span className={`text-xs font-mono ${wordCount >= 250 && wordCount <= 350 ? 'text-accent' : 'text-warning'}`}>
+                  {wordCount} Woerter
+                </span>
+              </div>
             </div>
             <textarea
               value={text}
@@ -142,6 +172,10 @@ export default function ApplicationEdit() {
               className="flex items-center gap-1 bg-card border border-accent text-accent px-4 py-2 rounded text-sm hover:bg-accent/10">
               <RefreshCw size={14} /> Mit Claude ueberarbeiten
             </button>
+            <button onClick={handleHumanize} disabled={humanizing}
+              className="flex items-center gap-1 bg-card border border-warning text-warning px-4 py-2 rounded text-sm hover:bg-warning/10 disabled:opacity-50">
+              <Sparkles size={14} className={humanizing ? 'animate-spin' : ''} /> {humanizing ? 'Humanisiere...' : 'Humanisieren'}
+            </button>
             {app.full_package_pdf_path && (
               <a href={`/api/applications/${app.id}/pdf?type=komplett`}
                 className="flex items-center gap-1 bg-card border border-border text-text px-4 py-2 rounded text-sm hover:bg-navy">
@@ -149,6 +183,21 @@ export default function ApplicationEdit() {
               </a>
             )}
           </div>
+
+          {/* Flagged Patterns Warning */}
+          {humanScore?.flaggedPatterns?.length ? (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={14} className="text-warning" />
+                <span className="text-xs font-semibold text-warning">AI-Muster erkannt</span>
+              </div>
+              <ul className="space-y-1">
+                {humanScore.flaggedPatterns.map((p, i) => (
+                  <li key={i} className="text-xs text-text-muted">• {p}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         {/* Right: Job Info + Send Actions */}

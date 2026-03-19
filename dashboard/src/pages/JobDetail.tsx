@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiPatch } from '../api/client';
-import { ArrowLeft, ExternalLink, RefreshCw, Send, FileText } from 'lucide-react';
+import { ArrowLeft, ExternalLink, RefreshCw, Send, FileText, Building2, Search, Save } from 'lucide-react';
 
 interface Job {
   id: string; title: string; company: string; location: string | null;
@@ -46,6 +46,12 @@ export default function JobDetail() {
   const [matchDetails, setMatchDetails] = useState<MatchDetails>({});
   const [rematching, setRematching] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [street, setStreet] = useState('');
+  const [zip, setZip] = useState('');
+  const [city, setCity] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [researching, setResearching] = useState(false);
+  const [researchResult, setResearchResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -86,6 +92,21 @@ export default function JobDetail() {
   async function handleStatusChange(newStatus: string) {
     await apiPatch(`/jobs/${id}`, { status: newStatus });
     setJob({ ...job!, status: newStatus });
+  }
+
+  async function handleSaveAddress() {
+    setSavingAddress(true);
+    try {
+      await apiPatch(`/jobs/${id}/address`, { street, zip, city });
+    } finally { setSavingAddress(false); }
+  }
+
+  async function handleResearch() {
+    setResearching(true);
+    try {
+      const result = await apiPost<{ report?: string }>(`/jobs/${id}/research`);
+      setResearchResult(result.report || 'Recherche abgeschlossen');
+    } finally { setResearching(false); }
   }
 
   return (
@@ -210,6 +231,32 @@ export default function JobDetail() {
               <div className="flex items-center gap-2 bg-blue-500/20 text-blue-400 px-3 py-2 rounded text-sm">
                 <Send size={14} /> 📧 {job.application_email}
               </div>
+            )}
+          </div>
+
+          {/* Company Address */}
+          <div className="bg-card border border-border rounded-lg p-5 space-y-3">
+            <h2 className="text-xs font-semibold text-text-muted flex items-center gap-1"><Building2 size={12} /> FIRMENADRESSE</h2>
+            <input value={street} onChange={(e) => setStreet(e.target.value)} placeholder="Strasse"
+              className="w-full bg-navy border border-border rounded px-3 py-1.5 text-sm text-text focus:outline-none focus:border-accent" />
+            <div className="grid grid-cols-3 gap-2">
+              <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="PLZ"
+                className="bg-navy border border-border rounded px-3 py-1.5 text-sm text-text focus:outline-none focus:border-accent" />
+              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ort"
+                className="col-span-2 bg-navy border border-border rounded px-3 py-1.5 text-sm text-text focus:outline-none focus:border-accent" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSaveAddress} disabled={savingAddress}
+                className="flex-1 flex items-center justify-center gap-1 bg-accent text-navy py-1.5 rounded text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                <Save size={13} /> {savingAddress ? 'Speichere...' : 'Adresse speichern'}
+              </button>
+              <button onClick={handleResearch} disabled={researching}
+                className="flex-1 flex items-center justify-center gap-1 bg-border text-text py-1.5 rounded text-sm hover:bg-border/80 disabled:opacity-50">
+                <Search size={13} className={researching ? 'animate-spin' : ''} /> {researching ? 'Recherchiere...' : 'Firma recherchieren'}
+              </button>
+            </div>
+            {researchResult && (
+              <div className="bg-navy border border-border rounded p-3 text-xs text-text whitespace-pre-wrap">{researchResult}</div>
             )}
           </div>
 

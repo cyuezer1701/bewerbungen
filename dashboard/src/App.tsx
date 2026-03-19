@@ -9,6 +9,8 @@ import Applications from './pages/Applications';
 import ApplicationEdit from './pages/ApplicationEdit';
 import SearchProfiles from './pages/SearchProfiles';
 import Documents from './pages/Documents';
+import Wishes from './pages/Wishes';
+import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
 import ActivityLog from './pages/ActivityLog';
@@ -36,6 +38,8 @@ export default function App() {
           <Route path="/applications" element={<Applications />} />
           <Route path="/applications/:id" element={<ApplicationEdit />} />
           <Route path="/profiles" element={<SearchProfiles />} />
+          <Route path="/wishes" element={<Wishes />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/analytics" element={<Analytics />} />
