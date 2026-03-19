@@ -9,6 +9,7 @@ import { registerStatusHandlers } from './handlers/status.js';
 import { registerSearchHandlers } from './handlers/search.js';
 import { registerSendHandlers } from './handlers/send.js';
 import { registerAddressHandlers } from './handlers/address.js';
+import { registerWishHandlers } from './handlers/wishes.js';
 import { isTestMode, toggleTestMode, getTestEmail, testTag } from '../utils/test-mode.js';
 import { runScrapers } from '../scrapers/index.js';
 import { runMatching } from '../matching/index.js';
@@ -18,6 +19,11 @@ let bot: Telegraf | null = null;
 
 export function createBot(): Telegraf {
   bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
+
+  // Global error handler — prevents polling death on unhandled errors
+  bot.catch((err, ctx) => {
+    logger.error('Bot error (caught)', { error: err, updateType: ctx.updateType });
+  });
 
   // Auth middleware: only allow configured chat ID
   bot.use((ctx, next) => {
@@ -44,7 +50,10 @@ export function createBot(): Telegraf {
       `/status — Tracking Dashboard\n` +
       `/stats — Statistiken\n` +
       `/search add|list|remove — Suchprofile verwalten\n` +
-      `/update <id> <status> — Job Status aendern`
+      `/update <id> <status> — Job Status aendern\n` +
+      `/wish <text> — Wunsch hinzufuegen\n` +
+      `/wishes — Alle Wuensche anzeigen\n` +
+      `/wish remove <id> — Wunsch deaktivieren`
     );
   });
 
@@ -79,6 +88,7 @@ export function createBot(): Telegraf {
   registerSearchHandlers(bot);
   registerSendHandlers(bot);
   registerAddressHandlers(bot);
+  registerWishHandlers(bot);
 
   // /testmode — toggle test mode
   bot.command('testmode', (ctx) => {
@@ -132,13 +142,34 @@ export function createBot(): Telegraf {
 export function startBot(): void {
   if (!bot) throw new Error('Bot not created. Call createBot() first.');
 
-  bot.launch({
-    dropPendingUpdates: true,
-  }).catch((err) => {
-    logger.error('Failed to start Telegram bot', { error: err });
-  });
-
+  launchWithRetry();
   logger.info('Telegram bot started (polling)');
+}
+
+function launchWithRetry(attempt = 0): void {
+  if (!bot) return;
+
+  bot.launch({
+    dropPendingUpdates: attempt === 0,
+  }).catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isConflict = msg.includes('409') || msg.includes('Conflict');
+    const isTimeout = msg.includes('TimeoutError') || msg.includes('ETIMEDOUT');
+
+    if (isConflict && attempt < 3) {
+      // Another instance running — wait and retry
+      const delay = 5000 * (attempt + 1);
+      logger.warn(`Bot conflict (attempt ${attempt + 1}/3), retrying in ${delay / 1000}s...`);
+      setTimeout(() => launchWithRetry(attempt + 1), delay);
+    } else if (isTimeout && attempt < 5) {
+      // Network timeout — retry quickly
+      const delay = 3000;
+      logger.warn(`Bot timeout (attempt ${attempt + 1}/5), retrying in ${delay / 1000}s...`);
+      setTimeout(() => launchWithRetry(attempt + 1), delay);
+    } else {
+      logger.error('Failed to start Telegram bot', { error: err, attempt });
+    }
+  });
 }
 
 export function stopBot(): void {

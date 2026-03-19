@@ -82,6 +82,10 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   salary_expectation_ideal: { value: '0', encrypted: false },
   sender_available_from: { value: 'sofort', encrypted: false },
   documents_order: { value: 'cover_letter,cv,zeugnisse,diplome,weiterbildungen', encrypted: false },
+  ai_recruiter_enabled: { value: 'true', encrypted: false },
+  ai_recruiter_aggressiveness: { value: 'balanced', encrypted: false },
+  human_score_minimum: { value: '70', encrypted: false },
+  human_score_auto_retry: { value: 'true', encrypted: false },
 };
 
 export function initDefaultSettings(): void {

@@ -9,9 +9,10 @@ import {
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
 import { generateCoverLetter, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
+import { calculateHumanScore, humanizeText } from '../../generator/humanizer.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { sendApplicationEmail } from '../../mailer/index.js';
-import { getActivityForJob } from '../../db/queries.js';
+import { getActivityForJob, updateApplicationHumanScore, updateApplicationCoverLetter as updateAppCoverLetter2 } from '../../db/queries.js';
 import { researchCompany } from '../../matching/company-research.js';
 import { logger } from '../../utils/logger.js';
 import type { ApplicationRow } from '../../db/queries.js';
@@ -165,6 +166,58 @@ applicationsRouter.post('/:id/mark-sent', (req, res) => {
   if (job) updateJobStatus(job.id, 'applied');
   logActivity(app.job_id, app.id, 'sent', JSON.stringify({ sent_via: 'portal', via: 'api' }));
   res.json({ ok: true });
+});
+
+// POST /api/applications/:id/humanize — Humanize cover letter (Phase 14)
+applicationsRouter.post('/:id/humanize', async (req, res) => {
+  const db = getDb();
+  const app = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id) as ApplicationRow | undefined;
+  if (!app) return res.status(404).json({ error: 'Application not found' });
+  if (!app.cover_letter_text) return res.status(400).json({ error: 'No cover letter text' });
+
+  try {
+    // Parse cover letter text back to content (best effort)
+    const lines = app.cover_letter_text.split('\n').filter((l: string) => l.trim().length > 0);
+    const paragraphs = lines.filter((l: string) => !l.startsWith('Sehr geehrte') && l !== 'Freundliche Grüsse' && l !== 'Freundliche Gruesse' && !lines.includes(l) || true);
+
+    // Extract the 4 body paragraphs (skip anrede and closing)
+    const bodyLines: string[] = [];
+    let started = false;
+    for (const line of lines) {
+      if (line.startsWith('Sehr geehrte') || line.startsWith('Sehr geehrter')) { started = true; continue; }
+      if (line === 'Freundliche Grüsse' || line === 'Freundliche Gruesse') break;
+      if (started) bodyLines.push(line);
+    }
+
+    const content = {
+      betreff: '',
+      anrede: lines.find((l: string) => l.startsWith('Sehr geehrte')) || '',
+      absatz_1: bodyLines[0] || '',
+      absatz_2: bodyLines[1] || '',
+      absatz_3: bodyLines[2] || '',
+      absatz_4: bodyLines[3] || '',
+    };
+
+    const { content: humanized, report } = await humanizeText(content);
+    const newText = [humanized.anrede || content.anrede, '', humanized.absatz_1, '', humanized.absatz_2, '', humanized.absatz_3, '', humanized.absatz_4, '', 'Freundliche Grüsse'].join('\n');
+    updateAppCoverLetter2(app.id, newText, app.version + 1);
+    updateApplicationHumanScore(app.id, report.score);
+    res.json({ report, version: app.version + 1 });
+  } catch (err) {
+    logger.error('Humanize failed', { error: err });
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Humanize failed' });
+  }
+});
+
+// GET /api/applications/:id/human-score — Get human score + flags (Phase 14)
+applicationsRouter.get('/:id/human-score', (req, res) => {
+  const db = getDb();
+  const app = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id) as ApplicationRow | undefined;
+  if (!app) return res.status(404).json({ error: 'Application not found' });
+  if (!app.cover_letter_text) return res.status(400).json({ error: 'No cover letter text' });
+
+  const { score, details, flaggedPatterns } = calculateHumanScore(app.cover_letter_text);
+  res.json({ score, details, flaggedPatterns, stored_score: (app as ApplicationRow & { human_score?: number }).human_score });
 });
 
 // GET /api/applications/:id/pdf — Download PDF

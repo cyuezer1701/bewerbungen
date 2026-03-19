@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
+import { Semaphore } from '../utils/semaphore.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from './cv-parser.js';
 
@@ -21,34 +22,6 @@ export interface JobMatchResult {
   salary_estimate: SalaryEstimate;
   recommendation: 'apply' | 'maybe' | 'skip';
   cover_letter_focus: string;
-}
-
-// --- Concurrency Limiter ---
-
-class Semaphore {
-  private queue: Array<() => void> = [];
-  private running = 0;
-
-  constructor(private max: number) {}
-
-  async acquire(): Promise<void> {
-    if (this.running < this.max) {
-      this.running++;
-      return;
-    }
-    return new Promise<void>((resolve) => {
-      this.queue.push(() => {
-        this.running++;
-        resolve();
-      });
-    });
-  }
-
-  release(): void {
-    this.running--;
-    const next = this.queue.shift();
-    if (next) next();
-  }
 }
 
 export const scoringSemaphore = new Semaphore(10);

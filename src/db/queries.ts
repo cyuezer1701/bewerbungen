@@ -410,3 +410,112 @@ export function incrementFollowUpCount(id: string): void {
     WHERE id = ?
   `).run(id);
 }
+
+// --- Candidate Wishes (Phase 14) ---
+
+export interface CandidateWishRow {
+  id: string;
+  category: string;
+  wish: string;
+  priority: string;
+  is_active: number;
+  created_at: string;
+}
+
+export function getActiveWishes(): CandidateWishRow[] {
+  const db = getDb();
+  return db.prepare(
+    "SELECT * FROM candidate_wishes WHERE is_active = 1 ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, created_at DESC"
+  ).all() as CandidateWishRow[];
+}
+
+export function getAllWishes(): CandidateWishRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM candidate_wishes ORDER BY created_at DESC').all() as CandidateWishRow[];
+}
+
+export function insertWish(wish: { id: string; category: string; wish: string; priority?: string }): void {
+  const db = getDb();
+  db.prepare(
+    'INSERT INTO candidate_wishes (id, category, wish, priority) VALUES (?, ?, ?, ?)'
+  ).run(wish.id, wish.category, wish.wish, wish.priority || 'medium');
+}
+
+export function updateWish(id: string, updates: Partial<{ category: string; wish: string; priority: string; is_active: number }>): void {
+  const db = getDb();
+  const fields: string[] = [];
+  const params: unknown[] = [];
+  if (updates.category !== undefined) { fields.push('category = ?'); params.push(updates.category); }
+  if (updates.wish !== undefined) { fields.push('wish = ?'); params.push(updates.wish); }
+  if (updates.priority !== undefined) { fields.push('priority = ?'); params.push(updates.priority); }
+  if (updates.is_active !== undefined) { fields.push('is_active = ?'); params.push(updates.is_active); }
+  if (fields.length === 0) return;
+  params.push(id);
+  db.prepare(`UPDATE candidate_wishes SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deactivateWish(id: string): void {
+  const db = getDb();
+  db.prepare('UPDATE candidate_wishes SET is_active = 0 WHERE id = ?').run(id);
+}
+
+// --- Candidate Profile (Phase 14) ---
+
+export interface CandidateProfileRow {
+  id: string;
+  career_trajectory: string | null;
+  avoid_roles: string | null;
+  strengths: string | null;
+  usps: string | null;
+  ideal_companies: string | null;
+  search_strategy_keywords: string | null;
+  salary_insight: string | null;
+  wishes: string | null;
+  raw_assessment: string | null;
+  generated_at: string;
+  updated_at: string;
+}
+
+export function getCandidateProfile(): CandidateProfileRow | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM candidate_profile WHERE id = 'singleton'").get() as CandidateProfileRow | undefined;
+  return row ?? null;
+}
+
+export function upsertCandidateProfile(profile: Partial<CandidateProfileRow>): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO candidate_profile (id, career_trajectory, avoid_roles, strengths, usps, ideal_companies, search_strategy_keywords, salary_insight, wishes, raw_assessment, generated_at, updated_at)
+    VALUES ('singleton', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      career_trajectory = COALESCE(?, career_trajectory),
+      avoid_roles = COALESCE(?, avoid_roles),
+      strengths = COALESCE(?, strengths),
+      usps = COALESCE(?, usps),
+      ideal_companies = COALESCE(?, ideal_companies),
+      search_strategy_keywords = COALESCE(?, search_strategy_keywords),
+      salary_insight = COALESCE(?, salary_insight),
+      wishes = COALESCE(?, wishes),
+      raw_assessment = COALESCE(?, raw_assessment),
+      updated_at = datetime('now')
+  `).run(
+    profile.career_trajectory ?? null, profile.avoid_roles ?? null,
+    profile.strengths ?? null, profile.usps ?? null,
+    profile.ideal_companies ?? null, profile.search_strategy_keywords ?? null,
+    profile.salary_insight ?? null, profile.wishes ?? null,
+    profile.raw_assessment ?? null,
+    // ON CONFLICT values
+    profile.career_trajectory ?? null, profile.avoid_roles ?? null,
+    profile.strengths ?? null, profile.usps ?? null,
+    profile.ideal_companies ?? null, profile.search_strategy_keywords ?? null,
+    profile.salary_insight ?? null, profile.wishes ?? null,
+    profile.raw_assessment ?? null,
+  );
+}
+
+// --- Application Human Score (Phase 14) ---
+
+export function updateApplicationHumanScore(id: string, score: number): void {
+  const db = getDb();
+  db.prepare("UPDATE applications SET human_score = ?, updated_at = datetime('now') WHERE id = ?").run(score, id);
+}

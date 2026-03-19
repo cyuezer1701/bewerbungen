@@ -63,7 +63,29 @@ function formatJobCard(job: ReturnType<typeof getJobById>, index?: number): stri
     } catch { /* ignore */ }
   }
 
-  return `${prefix}\n\n📌 ${title}\n🏢 ${company}\n📍 ${location}\n${salaryLine}\n${methodLine}${skillsLines}`;
+  // Recruiter info from activity log (Phase 14)
+  let recruiterLines = '';
+  if (matchDetails) {
+    try {
+      const details = JSON.parse(matchDetails);
+      if (details.recruiter_verdict) {
+        recruiterLines += `\n💬 ${details.recruiter_verdict}`;
+      }
+      if (details.career_direction) {
+        const directionMap: Record<string, string> = {
+          aufstieg: '📈 Aufstieg',
+          seitwaerts: '↔️ Seitwaerts',
+          rueckschritt: '📉 Rueckschritt',
+        };
+        recruiterLines += `\n${directionMap[details.career_direction] || details.career_direction}`;
+      }
+      if (details.red_flags?.length) {
+        recruiterLines += `\n🚩 ${details.red_flags.slice(0, 2).join(', ')}`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  return `${prefix}\n\n📌 ${title}\n🏢 ${company}\n📍 ${location}\n${salaryLine}\n${methodLine}${skillsLines}${recruiterLines}`;
 }
 
 function formatNum(n: number): string {

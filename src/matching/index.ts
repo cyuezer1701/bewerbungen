@@ -5,11 +5,17 @@ import {
   updateJobSalaryEstimate,
   updateJobStatus,
   logActivity,
+  getActiveWishes,
+  getCandidateProfile,
 } from '../db/queries.js';
 import { getStructuredCV } from './cv-parser.js';
 import { scoreJob } from './job-scorer.js';
+import { assessJobAsRecruiter } from './ai-recruiter.js';
+import { loadCandidateProfile } from './candidate-profile.js';
 import { config } from '../config.js';
 import { getSetting } from '../db/settings.js';
+import type { JobMatchResult } from './job-scorer.js';
+import type { RecruiterAssessment } from './ai-recruiter.js';
 
 export async function runMatching(): Promise<number> {
   logger.info('Starting job matching...');
@@ -32,23 +38,40 @@ export async function runMatching(): Promise<number> {
 
   logger.info(`Scoring ${jobs.length} unmatched jobs...`);
 
+  // Check if AI Recruiter is enabled
+  const useRecruiter = getSetting('ai_recruiter_enabled') !== 'false';
+  const profile = useRecruiter ? loadCandidateProfile() : null;
+  const wishes = useRecruiter ? getActiveWishes() : [];
+
+  if (useRecruiter) {
+    logger.info(`AI Recruiter active (profile: ${profile ? 'yes' : 'no'}, wishes: ${wishes.length})`);
+  }
+
   let scored = 0;
   const scoringPromises = jobs.map(async (job) => {
     try {
-      const result = await scoreJob(job, cv);
+      let result: JobMatchResult | RecruiterAssessment;
+
+      if (useRecruiter) {
+        result = await assessJobAsRecruiter(job, cv, profile, wishes);
+      } else {
+        result = await scoreJob(job, cv);
+      }
 
       // Update match score
       updateJobMatchScore(job.id, result.match_score, result.reasoning);
 
       // Update salary estimate
-      updateJobSalaryEstimate(
-        job.id,
-        result.salary_estimate.min,
-        result.salary_estimate.max,
-        result.salary_estimate.realistic,
-        result.salary_estimate.currency,
-        result.salary_estimate.reasoning
-      );
+      if (result.salary_estimate) {
+        updateJobSalaryEstimate(
+          job.id,
+          result.salary_estimate.min,
+          result.salary_estimate.max,
+          result.salary_estimate.realistic,
+          result.salary_estimate.currency,
+          result.salary_estimate.reasoning
+        );
+      }
 
       // Salary filter: skip jobs below minimum salary
       const minSalary = parseInt(getSetting('minimum_salary') || '0', 10);
@@ -64,6 +87,14 @@ export async function runMatching(): Promise<number> {
           missing_skills: result.missing_skills,
           cover_letter_focus: result.cover_letter_focus,
           filtered_reason: 'salary_below_minimum',
+          // Recruiter-specific fields
+          ...('recruiter_verdict' in result ? {
+            recruiter_verdict: result.recruiter_verdict,
+            career_direction: result.career_assessment?.direction,
+            wish_fulfillment_score: result.wish_fulfillment?.score,
+            red_flags: result.red_flags,
+            recruiter_note: result.recruiter_note,
+          } : {}),
         }));
         scored++;
         return;
@@ -74,7 +105,7 @@ export async function runMatching(): Promise<number> {
         updateJobStatus(job.id, 'reviewed');
       }
 
-      // Log activity
+      // Log activity with extended fields
       logActivity(job.id, null, 'matched', JSON.stringify({
         match_score: result.match_score,
         recommendation: result.recommendation,
@@ -83,6 +114,17 @@ export async function runMatching(): Promise<number> {
         matching_skills: result.matching_skills,
         missing_skills: result.missing_skills,
         cover_letter_focus: result.cover_letter_focus,
+        // Recruiter-specific fields
+        ...('recruiter_verdict' in result ? {
+          recruiter_verdict: result.recruiter_verdict,
+          career_direction: result.career_assessment?.direction,
+          career_explanation: result.career_assessment?.explanation,
+          wish_fulfillment_score: result.wish_fulfillment?.score,
+          wishes_fulfilled: result.wish_fulfillment?.fulfilled,
+          wishes_unfulfilled: result.wish_fulfillment?.unfulfilled,
+          red_flags: result.red_flags,
+          recruiter_note: result.recruiter_note,
+        } : {}),
       }));
 
       scored++;
@@ -93,6 +135,6 @@ export async function runMatching(): Promise<number> {
 
   await Promise.all(scoringPromises);
 
-  logger.info(`Matching complete: ${scored}/${jobs.length} jobs scored`);
+  logger.info(`Matching complete: ${scored}/${jobs.length} jobs scored${useRecruiter ? ' (AI Recruiter)' : ''}`);
   return scored;
 }

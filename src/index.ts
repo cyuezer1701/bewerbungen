@@ -4,7 +4,7 @@ import { initDatabase, closeDatabase } from './db/index.js';
 import { createBot, startBot, stopBot, getBot } from './bot/index.js';
 import { runScrapers } from './scrapers/index.js';
 import { runMatching } from './matching/index.js';
-import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDueFollowUp, incrementFollowUpCount, logActivity } from './db/queries.js';
+import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDueFollowUp, incrementFollowUpCount, logActivity, getActivityForJob } from './db/queries.js';
 import { followUpKeyboard } from './bot/keyboards.js';
 import { initAlerter, alert } from './utils/alerter.js';
 import { setLastScrape, buildHealthLine } from './utils/health.js';
@@ -47,7 +47,23 @@ function buildDailyReport(scrapedCount: number, matchedCount: number): string {
 
       msg += `${i + 1}. 🎯 ${j.match_score}% | ${j.title}\n`;
       msg += `   🏢 ${j.company} | 📍 ${j.location || 'k.A.'}\n`;
-      msg += `   💰 ${salaryStr} | ${methodIcon}\n\n`;
+      msg += `   💰 ${salaryStr} | ${methodIcon}\n`;
+
+      // Recruiter info (Phase 14)
+      const matchDetails = getActivityForJob(j.id, 'matched');
+      if (matchDetails) {
+        try {
+          const details = JSON.parse(matchDetails);
+          if (details.career_direction) {
+            const dirMap: Record<string, string> = { aufstieg: '📈 Aufstieg', seitwaerts: '↔️ Seitwaerts', rueckschritt: '📉 Rueckschritt' };
+            msg += `   ${dirMap[details.career_direction] || ''}`;
+          }
+          if (details.recruiter_verdict) {
+            msg += `\n   💬 "${details.recruiter_verdict}"`;
+          }
+        } catch { /* ignore */ }
+      }
+      msg += '\n\n';
     }
   }
 

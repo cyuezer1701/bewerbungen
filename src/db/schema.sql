@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS applications (
     sent_to TEXT,
     follow_up_at TEXT,
     follow_up_count INTEGER DEFAULT 0,
+    human_score INTEGER,
     status TEXT DEFAULT 'draft',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -120,3 +121,31 @@ CREATE INDEX IF NOT EXISTS idx_jobs_match_score ON jobs(match_score);
 CREATE INDEX IF NOT EXISTS idx_jobs_source_id ON jobs(source, source_id);
 CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);
 CREATE INDEX IF NOT EXISTS idx_activity_log_job_id ON activity_log(job_id);
+
+-- Kandidaten-Wuensche (Phase 14)
+CREATE TABLE IF NOT EXISTS candidate_wishes (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL DEFAULT 'general',
+    wish TEXT NOT NULL,
+    priority TEXT DEFAULT 'medium',
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Kandidaten-Profil (Phase 14, Singleton)
+CREATE TABLE IF NOT EXISTS candidate_profile (
+    id TEXT PRIMARY KEY DEFAULT 'singleton',
+    career_trajectory TEXT,
+    avoid_roles TEXT,
+    strengths TEXT,
+    usps TEXT,
+    ideal_companies TEXT,
+    search_strategy_keywords TEXT,
+    salary_insight TEXT,
+    wishes TEXT,
+    raw_assessment TEXT,
+    generated_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_candidate_wishes_active ON candidate_wishes(is_active);

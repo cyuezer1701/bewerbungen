@@ -56,6 +56,47 @@ function runMigrations(db: Database.Database): void {
       logger.info(`Migration: added jobs.${col.name}`);
     }
   }
+
+  // Phase 14: candidate_wishes + candidate_profile tables
+  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>).map(t => t.name);
+
+  if (!tables.includes('candidate_wishes')) {
+    db.exec(`CREATE TABLE IF NOT EXISTS candidate_wishes (
+      id TEXT PRIMARY KEY,
+      category TEXT NOT NULL DEFAULT 'general',
+      wish TEXT NOT NULL,
+      priority TEXT DEFAULT 'medium',
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_candidate_wishes_active ON candidate_wishes(is_active)');
+    logger.info('Migration: created candidate_wishes table');
+  }
+
+  if (!tables.includes('candidate_profile')) {
+    db.exec(`CREATE TABLE IF NOT EXISTS candidate_profile (
+      id TEXT PRIMARY KEY DEFAULT 'singleton',
+      career_trajectory TEXT,
+      avoid_roles TEXT,
+      strengths TEXT,
+      usps TEXT,
+      ideal_companies TEXT,
+      search_strategy_keywords TEXT,
+      salary_insight TEXT,
+      wishes TEXT,
+      raw_assessment TEXT,
+      generated_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`);
+    logger.info('Migration: created candidate_profile table');
+  }
+
+  // Phase 14: applications.human_score column
+  const appCols = (db.pragma('table_info(applications)') as Array<{ name: string }>).map(c => c.name);
+  if (!appCols.includes('human_score')) {
+    db.exec('ALTER TABLE applications ADD COLUMN human_score INTEGER');
+    logger.info('Migration: added applications.human_score');
+  }
 }
 
 export function closeDatabase(): void {

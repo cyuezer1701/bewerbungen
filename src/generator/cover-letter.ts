@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
 import { getSetting } from '../db/settings.js';
 import { formatSwissDate } from './pdf-builder.js';
-import { validateCoverLetter } from './humanizer.js';
+import { validateCoverLetter, calculateHumanScore, humanizeText } from './humanizer.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 import type { CompanyResearch } from '../matching/company-research.js';
@@ -113,6 +113,14 @@ Du bist KEIN KI-Textgenerator. Du schreibst wie ein selbstbewusster Profi der ge
 
 WICHTIG: Du lieferst NUR den Textinhalt als JSON. KEIN Layout, KEINE Adressen, KEIN Datum, KEINE Grussformel, KEINE Beilagen.
 
+ABSOLUT WICHTIGSTE REGEL — NICHTS ERFINDEN:
+- Nenne NUR Fakten, Zahlen, Projekte, Firmen und Erfahrungen die EXAKT so im Lebenslauf stehen
+- ERFINDE KEINE Zahlen, Metriken, Projektnamen oder Erfolge die nicht im CV vorkommen
+- Wenn der CV keine Zahl nennt, dann nenne auch du KEINE Zahl
+- Wenn du unsicher bist ob etwas im CV steht: WEGLASSEN
+- Lieber weniger schreiben als etwas Falsches behaupten
+- Das ist eine echte Bewerbung. Jede erfundene Information kann im Vorstellungsgespraech auffliegen
+
 KANDIDAT:
 {cv}
 
@@ -144,12 +152,12 @@ ABSATZ 1 — DER EINSTIEG (3-4 Saetze):
 
 ABSATZ 2 — DER BEWEIS (4-5 Saetze):
 - Nenne 2-3 konkrete Erfolge aus dem CV die DIREKT relevant fuer die Stelle sind
-- JEDER Erfolg braucht eine ZAHL oder ein messbares Ergebnis
+- NUR Fakten die WOERTLICH im CV stehen. KEINE erfundenen Zahlen oder Projekte
 - Verknuepfe jeden Erfolg mit einer Anforderung aus der Stellenbeschreibung
 
 ABSATZ 3 — DER MEHRWERT (3-4 Saetze):
 - Was bringt der Kandidat mit das UEBER die Mindestanforderungen hinausgeht?
-- Eigene Projekte als Beweis fuer Eigeninitiative und technische Tiefe
+- NUR auf echte Projekte und Erfahrungen aus dem CV verweisen
 - Warum passt der Kandidat kulturell zur Firma? (Bezug auf culture_values aus Firmenrecherche)
 
 ABSATZ 4 — DER SCHLUSS (2-3 Saetze):
@@ -160,11 +168,12 @@ ABSATZ 4 — DER SCHLUSS (2-3 Saetze):
 STRIKTE VERBOTE:
 - KEIN Konjunktiv: Nicht "wuerde", "koennte", "moechte gerne", "haette". Immer Indikativ.
 - KEIN sz: Immer "ss" (Schweizer Deutsch)
-- KEINE Bindestriche: Sie wirken maschinell
+- ABSOLUT KEINE Bindestriche (kein "-"): Nicht "IT-Service", nicht "Cloud-Migration", nicht "Team-Lead". Schreibe stattdessen "IT Service", "Cloud Migration", "Team Lead". Bindestriche wirken maschinell und KI-generiert. Das gilt fuer JEDES zusammengesetzte Wort.
 - KEINE dieser Floskeln: "Hiermit bewerbe ich mich", "Mit grossem Interesse", "Ich bin ueberzeugt dass", "Ueber eine Einladung wuerde ich mich freuen", "Ich bin eine engagierte Persoenlichkeit", "Ich bringe mit", "Zu meinen Staerken zaehlen"
 - KEIN Gehalt ausser es ist explizit verlangt (siehe oben)
 - KEINE Aufzaehlungszeichen oder Bullet Points
 - KEINE Emojis
+- NICHTS ERFINDEN: Keine Zahlen, Projekte oder Erfahrungen die nicht im CV stehen
 - Der Gesamttext (alle 4 Absaetze) MUSS 180-280 Woerter haben. Halte dich kurz.
 
 SPRACHE:
@@ -315,6 +324,31 @@ export async function generateCoverLetter(
     throw new Error('Cover letter generation failed: no content after retries');
   }
 
+  // Phase 14: Human Score + Auto-Humanize
+  const minHumanScore = parseInt(getSetting('human_score_minimum') || '70', 10);
+  const autoRetry = getSetting('human_score_auto_retry') !== 'false';
+  let bodyText = [content.absatz_1, content.absatz_2, content.absatz_3, content.absatz_4].join(' ');
+  let { score: humanScore } = calculateHumanScore(bodyText);
+
+  if (autoRetry && humanScore < minHumanScore) {
+    logger.info(`Human Score ${humanScore} < ${minHumanScore}, auto-humanizing...`);
+    try {
+      const { content: humanized, report } = await humanizeText(content);
+      content = {
+        ...content,
+        absatz_1: humanized.absatz_1,
+        absatz_2: humanized.absatz_2,
+        absatz_3: humanized.absatz_3,
+        absatz_4: humanized.absatz_4,
+      };
+      humanScore = report.score;
+      bodyText = [content.absatz_1, content.absatz_2, content.absatz_3, content.absatz_4].join(' ');
+      logger.info(`Auto-humanized: score ${report.score}, changes: ${report.changes.join(', ')}`);
+    } catch (err) {
+      logger.warn('Auto-humanize failed, using original', { error: err });
+    }
+  }
+
   const coverLetterData: CoverLetterData = {
     content,
     sender,
@@ -324,8 +358,7 @@ export async function generateCoverLetter(
     senderName,
   };
 
-  const bodyText = [content.absatz_1, content.absatz_2, content.absatz_3, content.absatz_4].join(' ');
-  logger.info(`Cover letter generated for "${job.title}" at ${job.company} (${bodyText.split(/\s+/).length} words)`);
+  logger.info(`Cover letter generated for "${job.title}" at ${job.company} (${bodyText.split(/\s+/).length} words, human score: ${humanScore})`);
 
   return coverLetterData;
 }

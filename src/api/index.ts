@@ -12,6 +12,8 @@ import { settingsRouter } from './routes/settings.js';
 import { documentsRouter } from './routes/documents.js';
 import { statsRouter } from './routes/stats.js';
 import { actionsRouter } from './routes/actions.js';
+import { wishesRouter } from './routes/wishes.js';
+import { profileRouter } from './routes/profile.js';
 
 export function startApiServer(): void {
   const app = express();
@@ -28,6 +30,8 @@ export function startApiServer(): void {
   app.use('/api/settings', settingsRouter);
   app.use('/api/documents', documentsRouter);
   app.use('/api/stats', statsRouter);
+  app.use('/api/wishes', wishesRouter);
+  app.use('/api/profile', profileRouter);
   app.use('/api', actionsRouter);
 
   // Serve dashboard static files (Phase 10)

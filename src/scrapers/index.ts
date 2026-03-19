@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { alertScraperError } from '../utils/alerter.js';
 import { getSetting } from '../db/settings.js';
-import { insertJob, getActiveSearchProfiles, logActivity } from '../db/queries.js';
+import { insertJob, logActivity } from '../db/queries.js';
 import { type ScrapedJob, launchStealthBrowser } from './base-scraper.js';
 import { IndeedScraper } from './indeed-scraper.js';
 import { LinkedInScraper } from './linkedin-scraper.js';
@@ -97,15 +97,12 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
     return [];
   }
 
-  // Collect keywords from settings DB (fallback to config)
-  const settingsKeywords = getSetting('search_keywords');
-  const defaultKeywords = (settingsKeywords || config.JOB_SEARCH_KEYWORDS).split(',').map((k) => k.trim());
-  const profiles = getActiveSearchProfiles();
-  const profileKeywords = profiles.flatMap((p) => p.keywords.split(',').map((k) => k.trim()));
-  const allKeywords = [...new Set([...defaultKeywords, ...profileKeywords])];
+  // Collect keywords from search strategy (AI profile + manual)
+  const { getSearchKeywords } = await import('../matching/search-strategy.js');
+  const { keywords: allKeywords, source: keywordSource } = getSearchKeywords();
   const location = getSetting('search_location') || config.JOB_SEARCH_LOCATION;
 
-  logger.info(`Scraping with keywords: ${allKeywords.join(', ')}`);
+  logger.info(`Scraping with keywords (${keywordSource}): ${allKeywords.join(', ')}`);
   logger.info(`Location: ${location}`);
 
   let browser;

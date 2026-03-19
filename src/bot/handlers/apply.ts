@@ -10,11 +10,13 @@ import {
   getApplicationByJobId,
   updateJobStatus,
   updateApplicationPdfPaths,
+  updateApplicationHumanScore,
   logActivity,
   getActivityForJob,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
 import { generateCoverLetter, buildRecipientAddress, validateRecipientAddress, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
+import { calculateHumanScore } from '../../generator/humanizer.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { researchCompany } from '../../matching/company-research.js';
 import {
@@ -111,6 +113,10 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
     cover_letter_text: formatCoverLetterForStorage(coverLetterData),
   });
 
+  // Save human score
+  const { score: savedHumanScore } = calculateHumanScore(bodyText);
+  updateApplicationHumanScore(appId, savedHumanScore);
+
   updateJobStatus(job.id, 'applying');
 
   // Generate PDFs
@@ -150,7 +156,14 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
   }
   if (job.application_email) msg += `📧 ${job.application_email}\n`;
   if (job.application_url) msg += `🔗 ${job.application_url}\n`;
-  msg += `\n📎 Anschreiben (v1) — ${wordCount} Woerter${pdfInfo}`;
+  // Phase 14: Human Score
+  const { score: humanScore } = calculateHumanScore(bodyText);
+  msg += `\n📝 Anschreiben (v1) — ${wordCount} Woerter`;
+  msg += `\n🧠 Human Score: ${humanScore}/100`;
+  if (humanScore < 70) {
+    msg += ` ⚠️ niedrig — automatisch humanisiert`;
+  }
+  msg += pdfInfo;
 
   await replyFn(msg, getKeyboardForMethod(job.id, job.application_method));
 }

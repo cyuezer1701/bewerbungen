@@ -1385,3 +1385,111 @@ Scraper laufen normal (echte Jobs). Test Mode betrifft NUR den Versand.
 ```bash
 curl -X DELETE -H "Authorization: Bearer TOKEN" http://localhost:3333/api/test-data
 ```
+
+---
+
+## Phase 14: AI Recruiter Agent + Enhanced Humanizer + Wunsch-Feld
+
+### AI Recruiter Modul (`src/matching/ai-recruiter.ts`)
+
+Ersetzt den einfachen Job-Scorer durch einen intelligenten Recruiter-Agenten:
+- Denkt wie ein erfahrener Headhunter (Karrierepfad, Aufstieg/Rueckschritt, Firmengrösse)
+- Beruecksichtigt Kandidaten-Profil und Wuensche
+- Setting `ai_recruiter_aggressiveness`: conservative | balanced | aggressive
+- Fallback: Wenn `ai_recruiter_enabled=false`, wird der alte `scoreJob()` genutzt
+
+**RecruiterAssessment Interface** (Superset von JobMatchResult):
+```typescript
+interface RecruiterAssessment extends JobMatchResult {
+  recruiter_verdict: string;
+  career_assessment: { direction: 'aufstieg' | 'seitwaerts' | 'rueckschritt'; explanation: string };
+  wish_fulfillment: { fulfilled: string[]; unfulfilled: string[]; score: number };
+  red_flags: string[];
+  recruiter_note: string;
+}
+```
+
+### Kandidaten-Profil (`src/matching/candidate-profile.ts`)
+
+Tiefes Profil via Claude-Analyse:
+- `generateCandidateProfile(cv, wishes)` — Erstellt Profil mit Karrierepfad, Staerken, USPs, Suchstrategie
+- `loadCandidateProfile()` — Laedt gespeichertes Profil aus DB
+- Gespeichert als Singleton in `candidate_profile` Tabelle
+
+### Such-Strategie (`src/matching/search-strategy.ts`)
+
+Dynamische Keywords aus AI-Profil + manuelle Einstellungen:
+- `getSearchKeywords()` — Merged AI-generierte + manuelle Keywords
+- `getExcludeKeywords()` — Anti-Keywords aus Profil
+
+### Neue DB Tabellen (Phase 14)
+
+```sql
+-- candidate_wishes: Kandidaten-Wuensche (category, wish, priority, is_active)
+-- candidate_profile: Singleton-Profil (career_trajectory, strengths, usps, search_strategy_keywords, etc.)
+```
+
+### Neues DB Feld
+- `applications.human_score INTEGER` — Human Score 0-100
+
+### Humanizer V2 (`src/generator/humanizer.ts`)
+
+Erweitert um AI-Detection-Vermeidung:
+- `calculateHumanScore(text)` — Score 0-100 basierend auf:
+  - Satzlaengen-Varianz (25 Punkte)
+  - Ich-Anteil <20% (20 Punkte)
+  - Keine AI-Transitions (20 Punkte)
+  - Kein Parallelismus (15 Punkte)
+  - Blacklist clean (10 Punkte)
+  - Natuerliche Elemente (10 Punkte)
+- `humanizeText(content)` — Claude-basiertes Rewriting bei Score <70
+- Auto-Humanize in `generateCoverLetter()` wenn `human_score_auto_retry=true`
+
+### AI-Transitions Blacklist (`src/generator/blacklist.ts`)
+- 18 neue AI-typische Uebergangswörter: "darueber hinaus", "des weiteren", "insbesondere", etc.
+- `checkAiTransitions(text)` — Prueft auf AI-Uebergaenge
+
+### Semaphore Utility (`src/utils/semaphore.ts`)
+- Aus `job-scorer.ts` extrahiert, wird von job-scorer und ai-recruiter geteilt
+
+### Neue Settings (Phase 14)
+- `ai_recruiter_enabled` — AI Recruiter an/aus (Default: true)
+- `ai_recruiter_aggressiveness` — conservative | balanced | aggressive (Default: balanced)
+- `human_score_minimum` — Mindest-Score fuer Cover Letter (Default: 70)
+- `human_score_auto_retry` — Auto-Humanize bei niedrigem Score (Default: true)
+
+### Neue Bot Commands (Phase 14)
+- `/wish <text>` — Wunsch hinzufuegen (Auto-Kategorie-Erkennung)
+- `/wishes` — Alle aktiven Wuensche anzeigen (gruppiert)
+- `/wish remove <id-prefix>` — Wunsch deaktivieren
+
+### Neue API Endpoints (Phase 14)
+- `GET /api/wishes` — Aktive Wuensche
+- `POST /api/wishes` — Neuen Wunsch erstellen (body: category, wish, priority)
+- `PATCH /api/wishes/:id` — Wunsch updaten
+- `DELETE /api/wishes/:id` — Wunsch deaktivieren
+- `POST /api/profile/generate` — Kandidaten-Profil generieren
+- `GET /api/profile` — Aktuelles Profil
+- `PUT /api/profile/wishes` — Wishes-Text updaten
+- `GET /api/profile/search-strategy` — Keywords + Source
+- `PATCH /api/profile/search-strategy` — Keywords ueberschreiben
+- `POST /api/applications/:id/humanize` — Anschreiben humanisieren
+- `GET /api/applications/:id/human-score` — Score + Flags
+
+### Erweiterter Flow (Phase 14)
+```
+Scrape (AI Keywords) -> Match (AI Recruiter) -> [/apply] -> Research -> Generate Cover Letter -> Human Score Check -> Auto-Humanize -> PDF
+```
+
+### Daily Report (erweitert)
+- Zeigt Recruiter-Verdict + Karriere-Richtung bei Top-Matches
+- Keyword-Source (AI vs manuell)
+
+### Job-Karte (erweitert)
+- Recruiter-Verdict als Zitat
+- Karriere-Richtung (Aufstieg/Seitwaerts/Rueckschritt)
+- Red Flags
+
+### Apply-Anzeige (erweitert)
+- Human Score Anzeige nach Generierung
+- Warnung bei niedrigem Score

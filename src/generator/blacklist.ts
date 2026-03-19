@@ -42,6 +42,61 @@ export const KONJUNKTIV_PATTERNS = [
   /\bhaette\b/gi,
 ];
 
+export const AI_TRANSITION_PHRASES = [
+  'darüber hinaus',
+  'darueber hinaus',
+  'des weiteren',
+  'insbesondere',
+  'in diesem zusammenhang',
+  'vor diesem hintergrund',
+  'nicht zuletzt',
+  'darauf aufbauend',
+  'in meiner funktion als',
+  'im rahmen meiner tätigkeit',
+  'im rahmen meiner taetigkeit',
+  'massgeblich dazu beigetragen',
+  'einen wesentlichen beitrag',
+  'konnte ich erfolgreich',
+  'zeichne ich mich aus durch',
+  'rundet mein profil ab',
+  'ergänzt wird dies durch',
+  'ergaenzt wird dies durch',
+];
+
+export function checkAiTransitions(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const phrase of AI_TRANSITION_PHRASES) {
+    if (lower.includes(phrase)) {
+      found.push(phrase);
+    }
+  }
+  return found;
+}
+
+// Common hyphenated compound words that should be written without hyphens
+const HYPHEN_PATTERNS = [
+  /\bIT-\w+/g,
+  /\bCloud-\w+/g,
+  /\bTeam-\w+/g,
+  /\bService-\w+/g,
+  /\bProjekt-\w+/g,
+  /\bSystem-\w+/g,
+  /\bEnd-to-End/gi,
+  /\bOn-Premise/gi,
+];
+
+export function checkHyphens(text: string): string[] {
+  const found: string[] = [];
+  for (const pattern of HYPHEN_PATTERNS) {
+    const matches = text.match(pattern);
+    if (matches) {
+      found.push(...matches);
+    }
+  }
+  return found;
+}
+
 export function checkBlacklist(text: string): string[] {
   const lower = text.toLowerCase();
   const matches: string[] = [];
