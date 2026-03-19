@@ -137,6 +137,12 @@ export class LinkedInScraper extends BaseScraper {
             salaryRequestedInPosting,
           };
 
+          // Filter out non-DACH jobs (LinkedIn often returns global results)
+          if (!this.isDACHLocation(card.location)) {
+            logger.debug(`LinkedIn: skipping non-DACH job "${card.title}" in "${card.location}"`);
+            continue;
+          }
+
           jobs.push(job);
           logger.info(`LinkedIn: scraped "${job.title}" at ${job.company}`);
         }
@@ -148,6 +154,31 @@ export class LinkedInScraper extends BaseScraper {
     }
 
     return jobs;
+  }
+
+  private isDACHLocation(location: string): boolean {
+    if (!location) return false;
+    const loc = location.toLowerCase();
+    const dachPatterns = [
+      // Countries
+      'switzerland', 'schweiz', 'suisse', 'svizzera',
+      'germany', 'deutschland', 'austria', 'österreich', 'oesterreich',
+      // Swiss cities
+      'zürich', 'zurich', 'zuerich', 'basel', 'bern', 'berne',
+      'genf', 'geneva', 'genève', 'lausanne', 'luzern', 'lucerne',
+      'lugano', 'winterthur', 'st. gallen', 'st gallen', 'aarau',
+      'baden', 'olten', 'solothurn', 'thun', 'biel', 'schaffhausen',
+      'frauenfeld', 'liestal', 'zug', 'schwyz', 'chur', 'sion',
+      'fribourg', 'neuchâtel', 'neuchatel', 'pratteln', 'muttenz',
+      'allschwil', 'reinach', 'binningen', 'munchenstein', 'riehen',
+      // German cities
+      'berlin', 'münchen', 'munich', 'hamburg', 'frankfurt', 'köln',
+      'cologne', 'stuttgart', 'düsseldorf', 'dortmund', 'freiburg',
+      'karlsruhe', 'mannheim', 'konstanz', 'lörrach',
+      // Austrian cities
+      'wien', 'vienna', 'graz', 'salzburg', 'innsbruck', 'linz',
+    ];
+    return dachPatterns.some(p => loc.includes(p));
   }
 
   private getSwissGeoId(location: string): string {

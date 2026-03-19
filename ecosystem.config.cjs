@@ -2,6 +2,7 @@ module.exports = {
   apps: [{
     name: 'auto-bewerber',
     script: './dist/index.js',
+    exec_mode: 'fork',
     instances: 1,
     autorestart: true,
     watch: false,

@@ -74,6 +74,8 @@ function buildDailyReport(scrapedCount: number, matchedCount: number): string {
   return msg;
 }
 
+let pipelineRunning = false;
+
 function main() {
   logger.info('AutoBewerber starting...');
 
@@ -96,6 +98,11 @@ function main() {
   // Setup cron job for scraping + matching + report
   const schedule = getSetting('scraper_schedule') || config.CRON_SCHEDULE;
   cron.schedule(schedule, async () => {
+    if (pipelineRunning) {
+      logger.warn('Pipeline already running, skipping duplicate cron trigger');
+      return;
+    }
+    pipelineRunning = true;
     logger.info('Cron job triggered: starting pipeline...');
     const telegramBot = getBot();
 
@@ -134,6 +141,8 @@ function main() {
     } catch (err) {
       logger.error('Cron job failed', { error: err });
       await alert(`Cron Job fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+    } finally {
+      pipelineRunning = false;
     }
   });
 
