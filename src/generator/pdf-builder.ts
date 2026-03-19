@@ -114,6 +114,9 @@ export async function generateCoverLetterPDF(
   }
   let html = fs.readFileSync(templatePath, 'utf-8');
 
+  // Strip markdown formatting (Claude sometimes adds ** despite instructions)
+  text = text.replace(/\*\*/g, '').replace(/\*/g, '');
+
   // Parse the letter text into structured parts
   const parts = parseLetterParts(text);
 

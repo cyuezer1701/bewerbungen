@@ -72,8 +72,10 @@ export class JobsChScraper extends BaseScraper {
 
                 // Company name - try to find it between workload/contract info and "Is this job"
                 // It's typically the last distinct text before the "Is this job relevant" button
-                const companyMatch = fullText.match(/(?:Permanent position|Temporary|Contract type:[^\n]+?)\s+(.+?)(?:Easy apply|Is this job)/);
-                const company = companyMatch ? companyMatch[1].trim() : '';
+                const companyMatch = fullText.match(/(?:Permanent position|Temporary position|Contract type:[^\n]+?)\s+(.+?)(?:Easy apply|Is this job)/);
+                let company = companyMatch ? companyMatch[1].trim() : '';
+                // Clean up: remove stray "position" prefix from company name
+                company = company.replace(/^position\s*/i, '').trim();
 
                 return { title, company, location, href, sourceId };
               }).filter((c): c is NonNullable<typeof c> => c !== null && c.sourceId !== '')
@@ -126,10 +128,11 @@ export class JobsChScraper extends BaseScraper {
             });
 
             // Extract company name from detail page if missing
-            const company = card.company || await page.evaluate(() => {
+            let company = card.company || await page.evaluate(() => {
               const el = document.querySelector('[data-cy="company-name"], [class*="company"]');
               return el?.textContent?.trim() || '';
             }) || 'Unbekannt';
+            company = company.replace(/^position\s*/i, '').trim();
 
             // Extract location from detail page if missing
             const jobLocation = card.location || await page.evaluate(() => {
