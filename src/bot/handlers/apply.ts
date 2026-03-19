@@ -14,7 +14,7 @@ import {
   getActivityForJob,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
-import { generateCoverLetter, buildRecipientAddress, validateRecipientAddress } from '../../generator/cover-letter.js';
+import { generateCoverLetter, buildRecipientAddress, validateRecipientAddress, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { researchCompany } from '../../matching/company-research.js';
 import {
@@ -99,15 +99,16 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
 
   const cv = await getStructuredCV();
   const focus = getCoverLetterFocus(job.id);
-  const coverLetter = await generateCoverLetter(job, cv, focus, companyResearch);
-  const wordCount = coverLetter.split(/\s+/).length;
+  const coverLetterData = await generateCoverLetter(job, cv, focus, companyResearch);
+  const bodyText = [coverLetterData.content.absatz_1, coverLetterData.content.absatz_2, coverLetterData.content.absatz_3, coverLetterData.content.absatz_4].join(' ');
+  const wordCount = bodyText.split(/\s+/).length;
 
   // Save application
   const appId = uuidv4();
   insertApplication({
     id: appId,
     job_id: job.id,
-    cover_letter_text: coverLetter,
+    cover_letter_text: formatCoverLetterForStorage(coverLetterData),
   });
 
   updateJobStatus(job.id, 'applying');
@@ -115,7 +116,7 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
   // Generate PDFs
   let pdfInfo = '';
   try {
-    const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetter, cv);
+    const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetterData);
     updateApplicationPdfPaths(appId, pdfPath, fullPackagePath);
     pdfInfo = `\n📎 Anschreiben PDF erstellt\n📎 Komplett Paket erstellt`;
     logActivity(job.id, appId, 'generated', JSON.stringify({

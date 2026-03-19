@@ -7,9 +7,8 @@ import { PDFDocument } from 'pdf-lib';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeFilename } from '../utils/sanitize.js';
-import { getSetting } from '../db/settings.js';
 import type { JobRow } from '../db/queries.js';
-import type { StructuredCV } from '../matching/cv-parser.js';
+import type { CoverLetterData } from './cover-letter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,82 +28,9 @@ export function formatSwissDate(): string {
   return `${day}. ${MONTHS_DE[parseInt(month, 10) - 1]} ${year}`;
 }
 
-function parseLetterParts(text: string): {
-  absender: string;
-  empfaenger: string;
-  datum: string;
-  betreff: string;
-  inhalt: string;
-} {
-  const lines = text.split('\n');
-  const parts = {
-    absender: '',
-    empfaenger: '',
-    datum: '',
-    betreff: '',
-    inhalt: '',
-  };
-
-  // Strategy: find the "Betreff:" line as anchor, then split around it
-  let betreffIndex = lines.findIndex((l) =>
-    l.toLowerCase().startsWith('betreff') || l.toLowerCase().startsWith('bewerbung als')
-  );
-
-  if (betreffIndex === -1) {
-    // Fallback: treat everything as content
-    parts.inhalt = text;
-    return parts;
-  }
-
-  // Everything before betreff: split into absender (top), then empfaenger
-  const beforeBetreff = lines.slice(0, betreffIndex);
-
-  // Find the date line (contains a date pattern or month name)
-  const datePatterns = /(\d{1,2}\.\s?\w+\s?\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|Januar|Februar|Maerz|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)/i;
-  const dateIndex = beforeBetreff.findIndex((l) => datePatterns.test(l));
-
-  if (dateIndex >= 0) {
-    // Lines before date: could be absender, then empfaenger
-    // Find the empty line that separates absender from empfaenger
-    let separatorIndex = -1;
-    for (let i = 0; i < dateIndex; i++) {
-      if (beforeBetreff[i].trim() === '') {
-        separatorIndex = i;
-        break;
-      }
-    }
-
-    if (separatorIndex >= 0) {
-      parts.absender = beforeBetreff.slice(0, separatorIndex).join('<br>');
-      parts.empfaenger = beforeBetreff.slice(separatorIndex + 1, dateIndex).join('<br>');
-    } else {
-      parts.empfaenger = beforeBetreff.slice(0, dateIndex).join('<br>');
-    }
-
-    parts.datum = beforeBetreff[dateIndex].trim();
-  } else {
-    parts.empfaenger = beforeBetreff.join('<br>');
-  }
-
-  // Betreff line
-  parts.betreff = lines[betreffIndex].replace(/^betreff:\s*/i, '').trim();
-
-  // Everything after betreff is the body
-  const afterBetreff = lines.slice(betreffIndex + 1).join('\n').trim();
-
-  // Convert paragraphs (double newline separated) to <p> tags
-  parts.inhalt = afterBetreff
-    .split(/\n\s*\n/)
-    .map((p) => `<p>${p.replace(/\n/g, ' ').trim()}</p>`)
-    .join('\n');
-
-  return parts;
-}
-
 export async function generateCoverLetterPDF(
-  text: string,
+  data: CoverLetterData,
   job: JobRow,
-  cv: StructuredCV,
   outputDir: string
 ): Promise<string> {
   // Read HTML template (try dist/ first, then src/ for dev mode)
@@ -114,47 +40,40 @@ export async function generateCoverLetterPDF(
   }
   let html = fs.readFileSync(templatePath, 'utf-8');
 
-  // Strip markdown formatting (Claude sometimes adds ** despite instructions)
-  text = text.replace(/\*\*/g, '').replace(/\*/g, '');
+  // Build absender HTML
+  const absenderLines = [
+    data.sender.name,
+    data.sender.street,
+    [data.sender.zip, data.sender.city].filter(Boolean).join(' '),
+    data.sender.phone,
+    data.sender.email,
+  ].filter(Boolean);
+  const absenderHtml = absenderLines.join('<br>');
 
-  // Parse the letter text into structured parts
-  const parts = parseLetterParts(text);
+  // Build empfaenger HTML
+  const empfaengerLines = [
+    data.recipient.companyFullName,
+    data.recipient.contactPerson
+      ? (data.recipient.contactGender === 'f' ? 'Frau ' : data.recipient.contactGender === 'm' ? 'Herr ' : '') +
+        (data.recipient.contactTitle ? `${data.recipient.contactTitle} ` : '') + data.recipient.contactPerson
+      : (data.recipient.department || 'Personalabteilung'),
+    data.recipient.street || undefined,
+    [data.recipient.zip, data.recipient.city].filter(Boolean).join(' ') || undefined,
+  ].filter(Boolean);
+  const empfaengerHtml = empfaengerLines.join('<br>');
 
-  // If parsing didn't find structured parts, create them from settings + job data
-  if (!parts.absender) {
-    const name = getSetting('sender_name') || cv.name;
-    const street = getSetting('sender_address_street');
-    const zip = getSetting('sender_address_zip');
-    const city = getSetting('sender_address_city');
-    const country = getSetting('sender_address_country');
-    const phone = getSetting('sender_phone');
-    const email = getSetting('sender_email');
-    const addressLines = [name, street, [zip, city].filter(Boolean).join(' '), country, phone, email].filter(Boolean);
-    parts.absender = addressLines.join('<br>');
-  }
-  if (!parts.empfaenger) {
-    parts.empfaenger = `${job.company}<br>${job.location || ''}`;
-  }
-  if (!parts.datum) {
-    parts.datum = formatSwissDate();
-  }
-  if (!parts.betreff) {
-    parts.betreff = `Bewerbung als ${job.title}`;
-  }
-  if (!parts.inhalt) {
-    parts.inhalt = text
-      .split(/\n\s*\n/)
-      .map((p) => `<p>${p.replace(/\n/g, ' ').trim()}</p>`)
-      .join('\n');
-  }
-
-  // Replace placeholders
+  // Replace all 10 placeholders
   html = html
-    .replace('{{absender}}', parts.absender)
-    .replace('{{empfaenger}}', parts.empfaenger)
-    .replace('{{datum}}', parts.datum)
-    .replace('{{betreff}}', parts.betreff)
-    .replace('{{inhalt}}', parts.inhalt);
+    .replace('{{absender}}', absenderHtml)
+    .replace('{{empfaenger}}', empfaengerHtml)
+    .replace('{{ortsdatum}}', data.ortsdatum)
+    .replace('{{betreff}}', data.content.betreff)
+    .replace('{{anrede}}', data.content.anrede)
+    .replace('{{absatz_1}}', data.content.absatz_1)
+    .replace('{{absatz_2}}', data.content.absatz_2)
+    .replace('{{absatz_3}}', data.content.absatz_3)
+    .replace('{{absatz_4}}', data.content.absatz_4)
+    .replace('{{sender_name}}', data.senderName);
 
   // Generate PDF with Puppeteer
   const launchOpts: Record<string, unknown> = {
@@ -191,12 +110,6 @@ export async function generateCoverLetterPDF(
     await page.pdf({
       path: pdfPath,
       format: 'A4',
-      margin: {
-        top: '2cm',
-        bottom: '2cm',
-        left: '2.5cm',
-        right: '2.5cm',
-      },
       printBackground: true,
     });
 
@@ -303,8 +216,7 @@ export async function mergeApplicationPDFs(
 
 export async function generateApplicationPackage(
   job: JobRow,
-  coverLetterText: string,
-  cv: StructuredCV
+  coverLetterData: CoverLetterData
 ): Promise<{ pdfPath: string; fullPackagePath: string }> {
   // Create output directory
   const companySlug = sanitizeFilename(job.company);
@@ -314,7 +226,7 @@ export async function generateApplicationPackage(
   fs.mkdirSync(outputDir, { recursive: true });
 
   // Generate cover letter PDF
-  const pdfPath = await generateCoverLetterPDF(coverLetterText, job, cv, outputDir);
+  const pdfPath = await generateCoverLetterPDF(coverLetterData, job, outputDir);
 
   // Merge all PDFs
   const fullPackagePath = await mergeApplicationPDFs(pdfPath, outputDir, companySlug);

@@ -21,6 +21,14 @@ export const COVER_LETTER_BLACKLIST = [
   'würde gerne',
   'hätte grosses interesse',
   'mit freundlichen grüssen',
+  // Swiss-Spelling Varianten (Claude schreibt manchmal ue statt ü)
+  'ich bin ueberzeugt',
+  'ueber eine einladung wuerde ich mich freuen',
+  'ueber eine einladung',
+  'ich wuerde mich freuen',
+  'ich koennte mir vorstellen',
+  'wuerde gerne',
+  'haette grosses interesse',
 ];
 
 export const KONJUNKTIV_PATTERNS = [
@@ -28,6 +36,10 @@ export const KONJUNKTIV_PATTERNS = [
   /\bkönnte\b/gi,
   /\bmöchte gerne\b/gi,
   /\bhätte\b/gi,
+  // Swiss-Spelling Varianten
+  /\bwuerde\b/gi,
+  /\bkoennte\b/gi,
+  /\bhaette\b/gi,
 ];
 
 export function checkBlacklist(text: string): string[] {

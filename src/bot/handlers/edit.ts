@@ -8,7 +8,7 @@ import {
   logActivity,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
-import { generateCoverLetter } from '../../generator/cover-letter.js';
+import { generateCoverLetter, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { getActivityForJob } from '../../db/queries.js';
 import { researchCompany } from '../../matching/company-research.js';
@@ -67,16 +67,17 @@ export function registerEditHandlers(bot: Telegraf): void {
       const cv = await getStructuredCV();
       const focus = getCoverLetterFocus(job.id);
       const companyResearch = await researchCompany(job.company, job.location || '');
-      const newCoverLetter = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
-      const wordCount = newCoverLetter.split(/\s+/).length;
+      const coverLetterData = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
+      const bodyText = [coverLetterData.content.absatz_1, coverLetterData.content.absatz_2, coverLetterData.content.absatz_3, coverLetterData.content.absatz_4].join(' ');
+      const wordCount = bodyText.split(/\s+/).length;
       const newVersion = existingApp.version + 1;
 
-      updateApplicationCoverLetter(existingApp.id, newCoverLetter, newVersion);
+      updateApplicationCoverLetter(existingApp.id, formatCoverLetterForStorage(coverLetterData), newVersion);
 
       // Regenerate PDFs
       let pdfInfo = '';
       try {
-        const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, newCoverLetter, cv);
+        const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetterData);
         updateApplicationPdfPaths(existingApp.id, pdfPath, fullPackagePath);
         pdfInfo = '\n📎 PDFs aktualisiert';
       } catch (err) {

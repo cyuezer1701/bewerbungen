@@ -60,19 +60,31 @@ Das System sucht täglich nach passenden Jobs, bewertet sie gegen den eigenen CV
 - Geschlecht wird ueber Vornamen-Datenbank (90 CH/DE Namen) bestimmt
 - `salary_requested_in_posting`: Erkennt ob Gehaltsvorstellung verlangt ("Gehaltsvorstellung", "Saläranspruch", etc.)
 
-### Anschreiben-Prompt (Schweizer Standard)
-- Absender oben rechts, Empfaenger links, Ortsdatum rechts
-- Persoenliche Anrede wenn Kontaktperson bekannt (Frau/Herr + Titel)
-- 4 Absaetze: Einstieg (Firmenbezug), Beweis (Erfolge mit Zahlen), Mehrwert (ueber Anforderungen hinaus), Schluss
-- Gehalt NUR wenn `salary_requested_in_posting == true`
-- Grussformel: "Freundliche Gruesse" (nicht "Mit freundlichen Gruessen")
-- Beilagen-Vermerk: "Beilagen: Lebenslauf, Arbeitszeugnisse"
-- Floskel-Blacklist: Automatische Pruefung nach Generierung, max 2 Retries
+### Anschreiben-Generierung: Zwei-Schritt-Architektur
+
+**Schritt 1: Claude liefert NUR Inhalt als JSON** (`src/generator/cover-letter.ts`)
+- Prompt enthaelt KEIN Layout, KEINE Adressen, KEIN Datum, KEINE Grussformel
+- Claude antwortet ausschliesslich mit JSON: `{ absatz_1, absatz_2, absatz_3, absatz_4 }`
+- Code uebernimmt `buildBetreff()` und `buildAnrede()` (nicht Claudes Werte)
+- Return-Typ: `CoverLetterData` (content, sender, recipient, datum, ortsdatum, senderName)
+
+**Schritt 2: HTML-Template kuemmert sich um Layout** (`src/generator/templates/cover-letter.html`)
+- 10 Platzhalter: absender, empfaenger, ortsdatum, betreff, anrede, absatz_1-4, sender_name
+- Statische Elemente im Template: "Freundliche Gruesse", Beilagen-Vermerk
+- Font: Source Sans 3 (Google Fonts + lokaler Fallback)
+- CSS-Margins: 25mm links/rechts/oben, 20mm unten (kein Puppeteer-Margin)
+
+**Humanizer** (`src/generator/humanizer.ts`):
+- Post-Processor nach Claude-Generierung, vor PDF
+- Prueft: Blacklist, Satzanfang-Vielfalt, Satzlaengen-Varianz, Wort-Wiederholungen, Absatzlaenge (2-6 Saetze), Gesamtlaenge (180-300 Woerter)
+- Bei Violations: Retry mit Feedback an Claude (max 2 Retries)
+
+**Speicherformat**: `formatCoverLetterForStorage()` fuer DB und Telegram-Preview (reiner Text)
 
 ### Floskel-Blacklist (`src/generator/blacklist.ts`)
-- 22 verbotene Floskeln (z.B. "hiermit bewerbe ich mich", "mit grossem interesse")
-- 4 Konjunktiv-Patterns (wuerde, koennte, moechte gerne, haette)
-- Nach jeder Generierung geprueft, bei Treffer automatisch neu generiert
+- 29 verbotene Floskeln inkl. Swiss-Spelling Varianten (ue statt ue)
+- 7 Konjunktiv-Patterns (wuerde/würde, koennte/könnte, moechte gerne, haette/hätte)
+- Nach jeder Generierung geprueft via Humanizer, bei Treffer automatisch neu generiert
 
 ### Empfaenger-Adresse Validierung
 - Pflichtfelder: Firmenname, Strasse, PLZ, Ort
@@ -578,50 +590,26 @@ Antwort NUR als JSON, kein Markdown, keine Backticks:
 
 ### 3. Bewerbungs-Generator (`src/generator/`)
 
-**cover-letter.ts:**
-- Generiere Anschreiben via Claude API
-- Prompt:
+**cover-letter.ts** (Zwei-Schritt-Architektur):
+- Claude liefert NUR 4 Absaetze als JSON (kein Layout, keine Adressen)
+- Code baut `CoverLetterData` Objekt mit Sender, Empfaenger, Datum, Betreff, Anrede
+- Humanizer validiert: Blacklist, Satzvielfalt, Wortwiederholungen, Laenge
+- `formatCoverLetterForStorage()` fuer DB-Speicherung als lesbarer Text
+- Interfaces: `SenderAddress`, `CoverLetterContent`, `CoverLetterData`
 
-```
-Du bist ein erfahrener Bewerbungscoach für den DACH-Markt (Schweiz/Deutschland/Österreich).
-Schreibe ein professionelles, individuelles Bewerbungsschreiben.
-
-REGELN:
-- Sprache: Deutsch (Schweizer Stil, kein ß, kein Genitiv-s wo unüblich)
-- Kein generischer Floskeln ("mit grossem Interesse habe ich...")
-- Direkt, selbstbewusst, konkret
-- Bezug auf spezifische Anforderungen aus der Stellenbeschreibung
-- Erwähne 2-3 konkrete Erfolge/Projekte aus dem CV die relevant sind
-- Länge: ca. 250-350 Wörter
-- Keine Emojis, keine Aufzählungszeichen im Fliesstext
-- KEINE Bindestriche verwenden, sie wirken maschinell
-- Format: Absender, Datum, Empfänger, Betreff, Anrede, 3-4 Absätze, Gruss
-
-KANDIDAT:
-{cv-structured.json}
-
-JOB:
-{job details}
-
-FOKUS-EMPFEHLUNG VOM MATCHING:
-{cover_letter_focus aus job-scorer}
-
-Antwort als reiner Text (kein Markdown), bereit für PDF-Generierung.
-```
+**humanizer.ts:**
+- Post-Processor fuer Claude-Output
+- Prueft Satzanfang-Vielfalt, Satzlaengen-Varianz, Wort-Wiederholungen
+- Prueft Absatzlaenge (2-6 Saetze) und Gesamtlaenge (180-300 Woerter)
+- Delegiert Blacklist-Pruefung an blacklist.ts
 
 **pdf-builder.ts:**
-- Nutze Puppeteer um HTML Template -> PDF zu rendern
-- Template in `src/generator/templates/cover-letter.html`:
-  - Sauberes, professionelles Layout
-  - Absender-Block oben rechts
-  - Empfänger links
-  - Datum
-  - Betreff fett
-  - Fliesstext
-  - Unterschrift (optional: Signatur-Bild einbetten)
-- Page Size: A4
-- Margin: 2.5cm links/rechts, 2cm oben/unten
-- Font: Arial oder Helvetica, 11pt
+- Nimmt `CoverLetterData` statt String
+- Template-Platzhalter: absender, empfaenger, ortsdatum, betreff, anrede, absatz_1-4, sender_name
+- Statisch im Template: "Freundliche Gruesse", Beilagen-Vermerk
+- CSS-Margins (25mm/20mm), kein Puppeteer-Margin
+- Font: Source Sans 3, 11pt
+- `generateApplicationPackage(job, coverLetterData)` — kein cv Parameter mehr
 - Nach Generierung: Merge mit CV + Zeugnisse via `pdf-lib` zu einem Komplett-PDF
 
 ### 4. Telegram Bot (`src/bot/`)

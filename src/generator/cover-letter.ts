@@ -4,10 +4,12 @@ import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
 import { getSetting } from '../db/settings.js';
 import { formatSwissDate } from './pdf-builder.js';
-import { checkBlacklist } from './blacklist.js';
+import { validateCoverLetter } from './humanizer.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 import type { CompanyResearch } from '../matching/company-research.js';
+
+// --- Interfaces ---
 
 export interface RecipientAddress {
   companyFullName: string;
@@ -19,6 +21,36 @@ export interface RecipientAddress {
   zip: string;
   city: string;
 }
+
+export interface SenderAddress {
+  name: string;
+  street: string;
+  zip: string;
+  city: string;
+  country: string;
+  phone: string;
+  email: string;
+}
+
+export interface CoverLetterContent {
+  betreff: string;
+  anrede: string;
+  absatz_1: string;
+  absatz_2: string;
+  absatz_3: string;
+  absatz_4: string;
+}
+
+export interface CoverLetterData {
+  content: CoverLetterContent;
+  sender: SenderAddress;
+  recipient: RecipientAddress;
+  datum: string;
+  ortsdatum: string;
+  senderName: string;
+}
+
+// --- Bestehende Helper ---
 
 export function validateRecipientAddress(addr: RecipientAddress): { valid: boolean; missing: string[] } {
   const missing: string[] = [];
@@ -42,7 +74,7 @@ export function buildRecipientAddress(job: JobRow, research: CompanyResearch): R
   };
 }
 
-function buildAnrede(addr: RecipientAddress): string {
+export function buildAnrede(addr: RecipientAddress): string {
   if (addr.contactPerson && addr.contactGender === 'f') {
     const title = addr.contactTitle ? `${addr.contactTitle} ` : '';
     return `Sehr geehrte Frau ${title}${addr.contactPerson}`;
@@ -54,14 +86,32 @@ function buildAnrede(addr: RecipientAddress): string {
   return 'Sehr geehrte Damen und Herren';
 }
 
-function buildBetreff(job: JobRow): string {
+export function buildBetreff(job: JobRow): string {
   let betreff = `Bewerbung als ${job.title}`;
   if (job.reference_number) betreff += ` (Ref: ${job.reference_number})`;
   return betreff;
 }
 
-const COVER_LETTER_PROMPT = `Du schreibst ein Bewerbungsschreiben fuer den Schweizer Arbeitsmarkt.
+// --- Storage Format ---
+
+export function formatCoverLetterForStorage(data: CoverLetterData): string {
+  return [
+    data.content.anrede, '',
+    data.content.absatz_1, '',
+    data.content.absatz_2, '',
+    data.content.absatz_3, '',
+    data.content.absatz_4, '',
+    'Freundliche Grüsse', '',
+    data.senderName,
+  ].join('\n');
+}
+
+// --- JSON-only Prompt ---
+
+const COVER_LETTER_PROMPT = `Du schreibst den INHALT eines Bewerbungsschreibens fuer den Schweizer Arbeitsmarkt.
 Du bist KEIN KI-Textgenerator. Du schreibst wie ein selbstbewusster Profi der genau weiss was er will.
+
+WICHTIG: Du lieferst NUR den Textinhalt als JSON. KEIN Layout, KEINE Adressen, KEIN Datum, KEINE Grussformel, KEINE Beilagen.
 
 KANDIDAT:
 {cv}
@@ -87,31 +137,6 @@ GEHALTSVORSTELLUNG IM INSERAT VERLANGT: {salary_requested}
 FOKUS-EMPFEHLUNG VOM MATCHING:
 {focus}
 
-FORMAT-REGELN (SCHWEIZER STANDARD):
-
-Zeile 1-4 ABSENDER (oben rechts):
-{absender}
-
-Dann eine Leerzeile.
-
-Zeile 6-10 EMPFAENGER (links):
-{empfaenger_block}
-
-Dann eine Leerzeile.
-
-ORTSDATUM (rechts):
-{ortsdatum}
-
-Dann eine Leerzeile.
-
-BETREFF (fett):
-"{betreff}"
-
-Dann eine Leerzeile.
-
-ANREDE:
-{anrede}
-
 ABSATZ 1 — DER EINSTIEG (3-4 Saetze):
 - VERBOT: Nicht mit "Hiermit bewerbe ich mich", "Mit grossem Interesse", "Ihre Stellenanzeige hat mich angesprochen", "Auf der Suche nach neuen Herausforderungen" oder aehnlichen Floskeln starten
 - STATTDESSEN: Starte mit einem konkreten Bezug zur Firma. Nutze die Firmenrecherche. Beispiel: Ein aktuelles Projekt, eine News, eine strategische Richtung der Firma und warum genau DAS den Kandidaten anspricht
@@ -132,16 +157,6 @@ ABSATZ 4 — DER SCHLUSS (2-3 Saetze):
 - Verfuegbarkeit: "Ich bin per {available_from} verfuegbar."
 - Abschluss: "Ich freue mich auf ein persoenliches Gespraech." (Indikativ, kein Konjunktiv)
 
-GRUSSFORMEL:
-"Freundliche Gruesse" (NICHT "Mit freundlichen Gruessen" — das ist Deutschland, nicht Schweiz)
-
-Dann eine Leerzeile.
-{sender_name}
-
-Dann eine Leerzeile.
-BEILAGEN-VERMERK:
-"Beilagen: Lebenslauf, Arbeitszeugnisse"
-
 STRIKTE VERBOTE:
 - KEIN Konjunktiv: Nicht "wuerde", "koennte", "moechte gerne", "haette". Immer Indikativ.
 - KEIN sz: Immer "ss" (Schweizer Deutsch)
@@ -150,7 +165,7 @@ STRIKTE VERBOTE:
 - KEIN Gehalt ausser es ist explizit verlangt (siehe oben)
 - KEINE Aufzaehlungszeichen oder Bullet Points
 - KEINE Emojis
-- Das Anschreiben MUSS auf eine einzige A4-Seite passen. Halte dich kurz (200-280 Woerter).
+- Der Gesamttext (alle 4 Absaetze) MUSS 180-280 Woerter haben. Halte dich kurz.
 
 SPRACHE:
 - Deutsch, Schweizer Stil
@@ -159,7 +174,15 @@ SPRACHE:
 - Aktiv statt passiv ("Ich fuehrte" nicht "Es wurde von mir gefuehrt")
 - Professionell aber menschlich, nicht roboterhaft
 
-Antwort als reiner Text, bereit fuer PDF-Generierung. Keine Markdown-Formatierung.`;
+Antworte AUSSCHLIESSLICH mit diesem JSON (keine Erklaerungen, kein Markdown):
+{
+  "absatz_1": "...",
+  "absatz_2": "...",
+  "absatz_3": "...",
+  "absatz_4": "..."
+}`;
+
+// --- Main Generator ---
 
 export async function generateCoverLetter(
   job: JobRow,
@@ -167,32 +190,31 @@ export async function generateCoverLetter(
   focus: string,
   companyResearch: CompanyResearch,
   feedback?: string
-): Promise<string> {
+): Promise<CoverLetterData> {
   // Build sender address from settings
   const senderName = getSetting('sender_name') || cv.name;
-  const senderStreet = getSetting('sender_address_street');
-  const senderZip = getSetting('sender_address_zip');
-  const senderCity = getSetting('sender_address_city');
-  const senderPhone = getSetting('sender_phone');
-  const senderEmail = getSetting('sender_email');
-  const absenderLines = [senderName, senderStreet, [senderZip, senderCity].filter(Boolean).join(' '), senderPhone, senderEmail].filter(Boolean);
-  const absender = absenderLines.join('\n');
+  const senderStreet = getSetting('sender_address_street') || '';
+  const senderZip = getSetting('sender_address_zip') || '';
+  const senderCity = getSetting('sender_address_city') || '';
+  const senderCountry = getSetting('sender_address_country') || '';
+  const senderPhone = getSetting('sender_phone') || '';
+  const senderEmail = getSetting('sender_email') || '';
+
+  const sender: SenderAddress = {
+    name: senderName,
+    street: senderStreet,
+    zip: senderZip,
+    city: senderCity,
+    country: senderCountry,
+    phone: senderPhone,
+    email: senderEmail,
+  };
+
   const datum = formatSwissDate();
   const ortsdatum = `${senderCity || 'Schweiz'}, ${datum}`;
 
   // Build recipient address
   const recipient = buildRecipientAddress(job, companyResearch);
-  const empfaengerLines = [
-    recipient.companyFullName,
-    recipient.contactPerson
-      ? (recipient.contactGender === 'f' ? 'Frau ' : recipient.contactGender === 'm' ? 'Herr ' : '') +
-        (recipient.contactTitle ? `${recipient.contactTitle} ` : '') + recipient.contactPerson
-      : (recipient.department || 'Personalabteilung'),
-    recipient.street || undefined,
-    [recipient.zip, recipient.city].filter(Boolean).join(' ') || undefined,
-  ].filter(Boolean);
-  const empfaengerBlock = empfaengerLines.join('\n');
-
   const anrede = buildAnrede(recipient);
   const betreff = buildBetreff(job);
 
@@ -226,14 +248,8 @@ export async function generateCoverLetter(
     .replace('{salary_requested}', salaryRequested)
     .replace('{salary_info}', salaryInfo)
     .replace('{focus}', focus)
-    .replace('{absender}', absender)
-    .replace('{empfaenger_block}', empfaengerBlock)
-    .replace('{ortsdatum}', ortsdatum)
-    .replace('{betreff}', betreff)
-    .replace('{anrede}', anrede)
     .replace('{salary_instruction}', salaryInstruction)
-    .replace('{available_from}', availableFrom)
-    .replace('{sender_name}', senderName);
+    .replace('{available_from}', availableFrom);
 
   if (feedback) {
     prompt += `\n\nZUSAETZLICHES FEEDBACK VOM BEWERBER:\n${feedback}\n\nBitte beruecksichtige dieses Feedback bei der Ueberarbeitung.`;
@@ -242,9 +258,9 @@ export async function generateCoverLetter(
   const client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
   const maxRetries = 2;
 
-  let text = '';
+  let content: CoverLetterContent | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    text = await withRetry(async () => {
+    const responseText = await withRetry(async () => {
       const response = await client.messages.create({
         model: config.CLAUDE_MODEL,
         max_tokens: 2048,
@@ -259,18 +275,57 @@ export async function generateCoverLetter(
       return textBlock.text;
     });
 
-    // Check blacklist
-    const blacklistMatches = checkBlacklist(text);
-    if (blacklistMatches.length === 0) break;
+    // Parse JSON response (strip backticks if present)
+    const cleaned = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    let parsed: Record<string, string>;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      logger.warn(`Failed to parse cover letter JSON (attempt ${attempt + 1}): ${cleaned.substring(0, 200)}`);
+      if (attempt < maxRetries) {
+        prompt += '\n\nWICHTIG: Deine letzte Antwort war kein valides JSON. Antworte NUR mit dem JSON-Objekt, keine Erklaerungen.';
+        continue;
+      }
+      throw new Error('Cover letter generation failed: invalid JSON response after retries');
+    }
+
+    // Build content with our own anrede/betreff (ignore Claude's if provided)
+    content = {
+      betreff: betreff,
+      anrede: anrede,
+      absatz_1: parsed.absatz_1 || '',
+      absatz_2: parsed.absatz_2 || '',
+      absatz_3: parsed.absatz_3 || '',
+      absatz_4: parsed.absatz_4 || '',
+    };
+
+    // Validate with humanizer
+    const validation = validateCoverLetter(content);
+    if (validation.valid) break;
 
     if (attempt < maxRetries) {
-      logger.warn(`Blacklist matches found (attempt ${attempt + 1}): ${blacklistMatches.join(', ')}`);
-      prompt += `\n\nWICHTIG: Das vorherige Anschreiben enthielt folgende verbotene Floskeln/Woerter. Ersetze sie ALLE:\n${blacklistMatches.map(m => `- "${m}"`).join('\n')}\n\nGeneriere das Anschreiben NEU ohne diese Floskeln.`;
+      logger.warn(`Humanizer violations (attempt ${attempt + 1}): ${validation.violations.join(', ')}`);
+      prompt += `\n\nWICHTIG: Das vorherige Anschreiben hatte folgende Probleme. Behebe sie ALLE:\n${validation.violations.map(v => `- ${v}`).join('\n')}\n\nGeneriere die 4 Absaetze NEU als JSON.`;
     } else {
-      logger.warn(`Blacklist matches still found after ${maxRetries} retries: ${blacklistMatches.join(', ')}`);
+      logger.warn(`Humanizer violations still found after ${maxRetries} retries: ${validation.violations.join(', ')}`);
     }
   }
 
-  logger.info(`Cover letter generated for "${job.title}" at ${job.company} (${text.split(/\s+/).length} words)`);
-  return text;
+  if (!content) {
+    throw new Error('Cover letter generation failed: no content after retries');
+  }
+
+  const coverLetterData: CoverLetterData = {
+    content,
+    sender,
+    recipient,
+    datum,
+    ortsdatum,
+    senderName,
+  };
+
+  const bodyText = [content.absatz_1, content.absatz_2, content.absatz_3, content.absatz_4].join(' ');
+  logger.info(`Cover letter generated for "${job.title}" at ${job.company} (${bodyText.split(/\s+/).length} words)`);
+
+  return coverLetterData;
 }

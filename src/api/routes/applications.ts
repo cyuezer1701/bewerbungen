@@ -8,7 +8,7 @@ import {
   updateJobStatus, logActivity,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
-import { generateCoverLetter } from '../../generator/cover-letter.js';
+import { generateCoverLetter, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { sendApplicationEmail } from '../../mailer/index.js';
 import { getActivityForJob } from '../../db/queries.js';
@@ -63,14 +63,14 @@ applicationsRouter.post('/', async (req, res) => {
     }
 
     const companyResearch = await researchCompany(job.company, job.location || '');
-    const coverLetter = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
+    const coverLetterData = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
     const appId = uuidv4();
-    insertApplication({ id: appId, job_id: job.id, cover_letter_text: coverLetter });
+    insertApplication({ id: appId, job_id: job.id, cover_letter_text: formatCoverLetterForStorage(coverLetterData) });
     updateJobStatus(job.id, 'applying');
 
     // Generate PDFs
     try {
-      const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetter, cv);
+      const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetterData);
       updateApplicationPdfPaths(appId, pdfPath, fullPackagePath);
     } catch (err) {
       logger.error('PDF generation failed in API', { error: err });
@@ -115,12 +115,12 @@ applicationsRouter.post('/:id/regenerate', async (req, res) => {
     if (matchDetails) { try { const d = JSON.parse(matchDetails); if (d.cover_letter_focus) focus = d.cover_letter_focus; } catch {} }
 
     const companyResearch = await researchCompany(job.company, job.location || '');
-    const newText = await generateCoverLetter(job, cv, focus, companyResearch, req.body.feedback);
+    const coverLetterData = await generateCoverLetter(job, cv, focus, companyResearch, req.body.feedback);
     const newVersion = app.version + 1;
-    updateApplicationCoverLetter(app.id, newText, newVersion);
+    updateApplicationCoverLetter(app.id, formatCoverLetterForStorage(coverLetterData), newVersion);
 
     try {
-      const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, newText, cv);
+      const { pdfPath, fullPackagePath } = await generateApplicationPackage(job, coverLetterData);
       updateApplicationPdfPaths(app.id, pdfPath, fullPackagePath);
     } catch (err) { logger.error('PDF regen failed', { error: err }); }
 
