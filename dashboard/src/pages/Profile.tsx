@@ -14,7 +14,7 @@ interface ProfileData {
 
 interface SearchStrategy {
   keywords: string[];
-  source: string[];
+  source: string;
   exclude: string[];
 }
 
@@ -158,18 +158,12 @@ export default function Profile() {
 
           {strategy ? (
             <>
-              {/* AI Keywords (green) */}
-              <div>
-                <p className="text-xs text-text-muted mb-2">AI Keywords</p>
-                <div className="flex flex-wrap gap-1">
-                  {strategy.source.map((kw) => (
-                    <span key={kw} className={`text-xs px-2 py-0.5 rounded ${tagColor('source')}`}>{kw}</span>
-                  ))}
-                  {strategy.source.length === 0 && <span className="text-xs text-text-muted">Keine</span>}
-                </div>
-              </div>
+              {/* Source info */}
+              {strategy.source && (
+                <p className="text-xs text-text-muted bg-navy border border-border rounded px-3 py-2">{strategy.source}</p>
+              )}
 
-              {/* Manual Keywords (blue → accent) */}
+              {/* Keywords */}
               <div>
                 <p className="text-xs text-text-muted mb-2">Keywords</p>
                 <div className="flex flex-wrap gap-1">
