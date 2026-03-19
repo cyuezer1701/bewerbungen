@@ -5,12 +5,31 @@ import { logger } from '../../utils/logger.js';
 import { config } from '../../config.js';
 import { testTag } from '../../utils/test-mode.js';
 
+/** Truncate a field and strip scraped junk (jobs.ch sidebar text etc.) */
+function cleanField(s: string, maxLen: number): string {
+  // Cut at common junk markers from jobs.ch scraping
+  const junkMarkers = ['SaveApply', 'Display original ad', 'See company profile', 'About the company', 'Log in, to see'];
+  let clean = s;
+  for (const marker of junkMarkers) {
+    const idx = clean.indexOf(marker);
+    if (idx > 0) clean = clean.substring(0, idx);
+  }
+  clean = clean.trim();
+  if (clean.length > maxLen) clean = clean.substring(0, maxLen).trim() + '…';
+  return clean;
+}
+
 function formatJobCard(job: ReturnType<typeof getJobById>, index?: number): string {
   if (!job) return '';
   const tag = testTag();
 
   const score = job.match_score ?? 0;
   const prefix = index !== undefined ? `${tag}🎯 Job #${index + 1} — Match: ${score}%` : `${tag}🎯 Match: ${score}%`;
+
+  // Clean title and company from scraped junk
+  const title = cleanField(job.title || '', 120);
+  const company = cleanField(job.company || '', 80);
+  const location = cleanField(job.location || 'Nicht angegeben', 60);
 
   // Salary formatting
   let salaryLine = '💰 Nicht geschaetzt';
@@ -44,7 +63,7 @@ function formatJobCard(job: ReturnType<typeof getJobById>, index?: number): stri
     } catch { /* ignore */ }
   }
 
-  return `${prefix}\n\n📌 ${job.title}\n🏢 ${job.company}\n📍 ${job.location || 'Nicht angegeben'}\n${salaryLine}\n${methodLine}${skillsLines}`;
+  return `${prefix}\n\n📌 ${title}\n🏢 ${company}\n📍 ${location}\n${salaryLine}\n${methodLine}${skillsLines}`;
 }
 
 function formatNum(n: number): string {
@@ -62,9 +81,13 @@ export function registerJobsHandlers(bot: Telegraf): void {
       }
 
       for (let i = 0; i < jobs.length; i++) {
-        const job = jobs[i];
-        const card = formatJobCard(job, i);
-        await ctx.reply(card, jobListKeyboard(job.id));
+        try {
+          const job = jobs[i];
+          const card = formatJobCard(job, i);
+          await ctx.reply(card, jobListKeyboard(job.id));
+        } catch (sendErr) {
+          logger.warn(`Failed to send job card #${i + 1}`, { error: sendErr });
+        }
       }
     } catch (err) {
       logger.error('Error in /jobs command', { error: err });
@@ -84,10 +107,10 @@ export function registerJobsHandlers(bot: Telegraf): void {
     await ctx.answerCbQuery();
 
     const desc = job.description
-      ? job.description.substring(0, 3500)
+      ? cleanField(job.description, 3000)
       : 'Keine Beschreibung verfuegbar';
 
-    let text = `📋 Details: ${job.title}\n🏢 ${job.company}\n\n${desc}`;
+    let text = `📋 Details: ${cleanField(job.title || '', 120)}\n🏢 ${cleanField(job.company || '', 80)}\n\n${desc}`;
 
     if (job.source_url) {
       text += `\n\n🔗 ${job.source_url}`;

@@ -1,7 +1,24 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { extractEmails } from '../utils/sanitize.js';
 import { getSetting } from '../db/settings.js';
+
+function findPlaywrightChrome(): string | undefined {
+  try {
+    const base = join(homedir(), '.cache', 'ms-playwright');
+    const dirs = readdirSync(base).filter(d => d.startsWith('chromium-')).sort();
+    if (dirs.length > 0) {
+      const chromePath = join(base, dirs[dirs.length - 1], 'chrome-linux', 'chrome');
+      if (existsSync(chromePath)) return chromePath;
+    }
+  } catch {
+    // Playwright not installed
+  }
+  return undefined;
+}
 
 export interface ScrapedJob {
   sourceId: string;
@@ -145,9 +162,16 @@ function getBrowserOptions() {
     headless: true,
     args,
   };
-  // Use system Chromium if PUPPETEER_EXECUTABLE_PATH is set (e.g. on ARM64 VPS)
+  // Use PUPPETEER_EXECUTABLE_PATH if set, otherwise try to find a working Chrome
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  } else {
+    // On ARM64, Puppeteer's bundled Chrome is x86-only. Use Playwright's Chrome if available.
+    const chromePath = findPlaywrightChrome();
+    if (chromePath) {
+      opts.executablePath = chromePath;
+      logger.info(`Using Playwright Chrome: ${chromePath}`);
+    }
   }
   return opts;
 }

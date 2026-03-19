@@ -18,10 +18,11 @@ REGELN:
 - Bezug auf spezifische Anforderungen aus der Stellenbeschreibung
 - Beziehe dich auf konkrete Firmenwerte oder Infos aus der FIRMENINFO, falls vorhanden
 - Erwaehne 2-3 konkrete Erfolge/Projekte aus dem CV die relevant sind
-- Laenge: ca. 250-350 Woerter
+- Laenge: ca. 200-280 Woerter
+- Das Anschreiben MUSS auf eine einzige A4-Seite passen. Halte dich kurz.
 - Keine Emojis, keine Aufzaehlungszeichen im Fliesstext
 - KEINE Bindestriche verwenden, sie wirken maschinell
-- Format: Absender, Datum, Empfaenger, Betreff, Anrede, 3-4 Absaetze, Gruss
+- Format: Absender, Datum, Empfaenger, Betreff, Anrede, 3 Absaetze, Gruss
 - Verwende GENAU dieses Datum: {datum}
 - Verwende GENAU diese Absenderadresse: {absender}
 

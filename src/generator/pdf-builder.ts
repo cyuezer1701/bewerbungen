@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { PDFDocument } from 'pdf-lib';
@@ -159,6 +160,20 @@ export async function generateCoverLetterPDF(
   };
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  } else {
+    // On ARM64, Puppeteer's bundled Chrome is x86-only. Use Playwright's Chrome if available.
+    try {
+      const base = path.join(homedir(), '.cache', 'ms-playwright');
+      const dirs = fs.readdirSync(base).filter(d => d.startsWith('chromium-')).sort();
+      if (dirs.length > 0) {
+        const chromePath = path.join(base, dirs[dirs.length - 1], 'chrome-linux', 'chrome');
+        if (fs.existsSync(chromePath)) {
+          launchOpts.executablePath = chromePath;
+        }
+      }
+    } catch {
+      // Playwright not installed, let Puppeteer try its default
+    }
   }
   const browser = await puppeteer.launch(launchOpts);
 

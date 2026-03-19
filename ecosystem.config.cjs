@@ -7,7 +7,8 @@ module.exports = {
     watch: false,
     max_memory_restart: '500M',
     env: {
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      PUPPETEER_EXECUTABLE_PATH: '/home/claude/.cache/ms-playwright/chromium-1208/chrome-linux/chrome'
     },
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     error_file: './logs/error.log',

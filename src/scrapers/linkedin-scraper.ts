@@ -1,8 +1,13 @@
 import type { Browser } from 'puppeteer';
-import { BaseScraper, type ScrapedJob, getRandomUserAgent, getRandomViewport } from './base-scraper.js';
+import { BaseScraper, type ScrapedJob, getRandomUserAgent } from './base-scraper.js';
 import { logger } from '../utils/logger.js';
 import { getJobBySourceId } from '../db/queries.js';
 
+/**
+ * LinkedIn scraper using the public guest jobs API.
+ * This endpoint returns HTML fragments without requiring login or cookies.
+ * No auth wall, no CAPTCHA — it's the same API the public jobs pages use.
+ */
 export class LinkedInScraper extends BaseScraper {
   readonly name = 'LinkedIn';
   readonly source = 'linkedin' as const;
@@ -18,71 +23,40 @@ export class LinkedInScraper extends BaseScraper {
 
     try {
       await page.setUserAgent(getRandomUserAgent());
-      const vp = getRandomViewport();
-      await page.setViewport({ width: vp.width, height: vp.height });
+
+      // LinkedIn guest API uses geoId for location — map common Swiss locations
+      const geoId = this.getSwissGeoId(location);
 
       for (const keyword of keywords) {
         if (jobs.length >= maxJobs) break;
 
-        const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}&f_TPR=r86400`;
         logger.info(`LinkedIn: searching "${keyword}" in ${location}`);
 
-        const navigated = await this.safeGoto(page, searchUrl, {
-          waitUntil: 'networkidle2',
+        // Use the guest API endpoint — returns HTML without auth wall
+        const apiUrl = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}${geoId ? `&geoId=${geoId}` : ''}&f_TPR=r86400&start=0`;
+
+        const navigated = await this.safeGoto(page, apiUrl, {
+          waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
         if (!navigated) continue;
 
-        await this.delay(4000, 8000);
+        await this.delay(2000, 4000);
 
-        // Check for CAPTCHA or auth wall
-        const pageUrl = page.url();
-        const pageContent = await page.content();
-        if (
-          pageUrl.includes('/authwall') ||
-          pageUrl.includes('/checkpoint') ||
-          pageContent.includes('captcha') ||
-          pageContent.includes('Sign in')
-        ) {
-          logger.warn('LinkedIn: auth wall or CAPTCHA detected, skipping');
-          continue;
-        }
-
-        // Scroll to load more jobs (3-5 times) with random mouse moves
-        const scrollCount = 3 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < scrollCount; i++) {
-          // Random mouse move before scrolling to appear more human
-          await page.mouse.move(
-            200 + Math.floor(Math.random() * 800),
-            200 + Math.floor(Math.random() * 400)
-          );
-          await this.delay(500, 1500);
-          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-          await this.delay(3000, 5000);
-
-          // Click "See more jobs" button if present
-          const seeMoreButton = await page.$('.infinite-scroller__show-more-button, button[aria-label="See more jobs"]');
-          if (seeMoreButton) {
-            await seeMoreButton.click().catch(() => {});
-            await this.delay(2000, 4000);
-          }
-        }
-
-        // Parse job cards
+        // Parse job cards from the guest API HTML response
         const jobCards = await page.$$eval(
-          '.jobs-search__results-list li, .base-card, [data-entity-urn]',
+          'li',
           (cards) =>
             cards.map((card) => {
-              const titleEl = card.querySelector('.base-search-card__title, h3.base-search-card__title');
-              const companyEl = card.querySelector('.base-search-card__subtitle, h4.base-search-card__subtitle');
+              const titleEl = card.querySelector('.base-search-card__title');
+              const companyEl = card.querySelector('.base-search-card__subtitle');
               const locationEl = card.querySelector('.job-search-card__location');
-              const linkEl = card.querySelector('a.base-card__full-link, a[data-tracking-control-name]');
+              const linkEl = card.querySelector('a.base-card__full-link');
               const dateEl = card.querySelector('time');
 
               const href = linkEl?.getAttribute('href') || '';
-              // Extract job ID from URL or data attribute
               const urn = card.getAttribute('data-entity-urn') || '';
-              const sourceId = urn.match(/(\d+)/)?.[1] || href.match(/view\/[^/]*?-(\d+)/)?.[1] || '';
+              const sourceId = urn.match(/(\d+)/)?.[1] || href.match(/(\d+)\?/)?.[1] || href.match(/-(\d+)$/)?.[1] || '';
 
               return {
                 title: titleEl?.textContent?.trim() || '',
@@ -108,10 +82,9 @@ export class LinkedInScraper extends BaseScraper {
             continue;
           }
 
-          // Random delay between detail page visits
-          await this.delay(4000, 8000);
+          await this.delay(2000, 5000);
 
-          // Navigate to detail page
+          // Fetch detail page via guest endpoint (no auth required)
           const detailUrl = card.href.startsWith('http')
             ? card.href
             : `https://www.linkedin.com${card.href}`;
@@ -120,38 +93,27 @@ export class LinkedInScraper extends BaseScraper {
             waitUntil: 'domcontentloaded',
             timeout: 30000,
           });
-          if (!detailNavigated) continue;
 
-          await this.delay(3000, 6000);
+          let description = '';
+          if (detailNavigated) {
+            await this.delay(1500, 3000);
 
-          // Check for auth wall on detail page
-          if (page.url().includes('/authwall') || page.url().includes('/login')) {
-            logger.warn('LinkedIn: auth wall on detail page, skipping');
-            continue;
-          }
-
-          // Extract description
-          const description = await this.getTextContent(
-            page,
-            '.description__text .show-more-less-html__markup, .show-more-less-html__markup, .description__text'
-          );
-
-          // Detect application method
-          const easyApplyButton = await page.$('.jobs-apply-button--top-card, [data-control-name="jobdetails_topcard_inapply"]');
-          const externalApplyLink = await page.$('a.jobs-apply-button[href*="externalApply"], a[data-tracking-control-name="public_jobs_apply-link-offsite"]');
-
-          let applicationUrl: string | undefined;
-          if (externalApplyLink) {
-            applicationUrl = await page.$eval(
-              'a.jobs-apply-button[href*="externalApply"], a[data-tracking-control-name="public_jobs_apply-link-offsite"]',
-              (el) => el.getAttribute('href') || ''
-            ).catch(() => undefined);
+            // Check if we hit auth wall on detail page
+            const currentUrl = page.url();
+            if (currentUrl.includes('/authwall') || currentUrl.includes('/login')) {
+              logger.debug(`LinkedIn: auth wall on detail page for ${card.sourceId}, using title only`);
+            } else {
+              description = await this.getTextContent(
+                page,
+                '.show-more-less-html__markup, .description__text, .decorated-job-posting__details'
+              );
+            }
           }
 
           const { method, url, email } = this.detectApplicationMethod(
-            description || '',
-            !!easyApplyButton || !!externalApplyLink,
-            applicationUrl || detailUrl
+            description,
+            true,
+            detailUrl
           );
 
           const job: ScrapedJob = {
@@ -160,7 +122,7 @@ export class LinkedInScraper extends BaseScraper {
             title: card.title,
             company: card.company,
             location: card.location,
-            description: description || '',
+            description: description || `${card.title} at ${card.company}`,
             sourceUrl: detailUrl,
             postedAt: card.postedAt || undefined,
             applicationMethod: method,
@@ -179,5 +141,17 @@ export class LinkedInScraper extends BaseScraper {
     }
 
     return jobs;
+  }
+
+  private getSwissGeoId(location: string): string {
+    const loc = location.toLowerCase();
+    // LinkedIn geoIds for Swiss cities/regions
+    if (loc.includes('zürich') || loc.includes('zuerich') || loc.includes('zurich')) return '106442186';
+    if (loc.includes('basel')) return '105210301';
+    if (loc.includes('bern')) return '106903546';
+    if (loc.includes('genf') || loc.includes('geneva') || loc.includes('genève')) return '105605498';
+    if (loc.includes('lausanne')) return '101048506';
+    if (loc.includes('schweiz') || loc.includes('switzerland')) return '106693272';
+    return '106693272'; // Default: Switzerland
   }
 }
