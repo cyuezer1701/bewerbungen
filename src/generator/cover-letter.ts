@@ -64,16 +64,38 @@ export function validateRecipientAddress(addr: RecipientAddress): { valid: boole
   return { valid: missing.length === 0, missing };
 }
 
+/** Remove scraped junk from company names and address fields */
+function sanitizeCompanyName(name: string): string {
+  if (!name) return name;
+  let clean = name;
+  // Remove jobs.ch "position " prefix
+  clean = clean.replace(/^position\s+/i, '');
+  // Remove trailing scraped junk
+  clean = clean.replace(/(?:Promoted|New|Save|Apply|Easy apply|SaveApply).*$/i, '');
+  // Remove legal form in parentheses (keep the core name)
+  clean = clean.replace(/\s*\((?:öffentliche|eingetragen|registered|public)[^)]*\)\s*/gi, '');
+  return clean.trim();
+}
+
+function sanitizeAddressLine(line: string): string {
+  if (!line) return '';
+  const junkPatterns = ['rund um', 'SaveApply', 'Promoted', 'Display original', 'See company', 'Log in', 'About the company', 'Easy apply'];
+  for (const junk of junkPatterns) {
+    if (line.toLowerCase().includes(junk.toLowerCase())) return '';
+  }
+  return line.trim();
+}
+
 export function buildRecipientAddress(job: JobRow, research: CompanyResearch): RecipientAddress {
   return {
-    companyFullName: research.company_full_name || job.company,
+    companyFullName: sanitizeCompanyName(research.company_full_name || job.company),
     contactPerson: job.contact_person || undefined,
     contactGender: job.contact_gender || undefined,
     contactTitle: job.contact_title || undefined,
-    department: research.department || job.contact_department || undefined,
-    street: research.street,
+    department: sanitizeAddressLine(research.department || job.contact_department || ''),
+    street: sanitizeAddressLine(research.street),
     zip: research.zip,
-    city: research.city || job.location || '',
+    city: sanitizeAddressLine(research.city || job.location || ''),
   };
 }
 
@@ -178,6 +200,13 @@ STRIKTE VERBOTE:
 - KEINE Emojis
 - NICHTS ERFINDEN: Keine Zahlen, Projekte oder Erfahrungen die nicht im CV stehen
 - Der Gesamttext (alle 4 Absaetze) MUSS 150-200 Woerter haben. MAXIMAL 200 Woerter. Das Anschreiben MUSS auf EINE A4-Seite passen inkl. Absender, Empfaenger, Datum, Betreff und Gruss. Kuerzer ist besser.
+
+STIL — SO KLINGT EIN MENSCH:
+- SATZLAENGE VARIIEREN: Mische kurze Saetze (6-10 Woerter) mit laengeren (18-25 Woerter). NICHT jeder Satz gleich lang. Ein kurzer Satz nach einem langen wirkt natuerlich.
+- SATZANFAENGE VARIIEREN: Maximal 2 aufeinanderfolgende Saetze mit dem gleichen Wort beginnen. Nicht "Ich... Ich... Ich...".
+- KEIN gleichmaessiger Rhythmus. Ein Mensch schreibt mal knapp, mal ausfuehrlich. Lass den Text atmen.
+- Gelegentlich einen Einschub in Klammern oder einen kurzen Nebensatz verwenden — das wirkt menschlich.
+- KEINE substanzlosen Behauptungen: Nicht "war ein voller Erfolg" oder "bringt Mehrwert". Stattdessen KONKRET sagen was passiert ist.
 
 SPRACHE:
 - Deutsch, Schweizer Stil

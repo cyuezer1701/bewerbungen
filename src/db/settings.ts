@@ -80,6 +80,7 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   salary_expectation_min: { value: '0', encrypted: false },
   salary_expectation_max: { value: '0', encrypted: false },
   salary_expectation_ideal: { value: '0', encrypted: false },
+  notice_period: { value: '3 Monate', encrypted: false },
   sender_available_from: { value: 'sofort', encrypted: false },
   documents_order: { value: 'cover_letter,cv,zeugnisse,diplome,weiterbildungen', encrypted: false },
   ai_recruiter_enabled: { value: 'true', encrypted: false },

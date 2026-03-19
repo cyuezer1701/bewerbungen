@@ -33,6 +33,7 @@ Pruefe:
 1. Werden Projekte, Firmen, Rollen oder Technologien erwaehnt die NICHT im CV stehen?
 2. Werden Zahlen, Metriken oder Zeitraeume genannt die NICHT im CV verifizierbar sind?
 3. Werden Erfolge oder Erfahrungen behauptet die nirgends im CV erwaehnt werden?
+4. FIRMENNAMEN: Pruefe ob alle erwaehnte Firmennamen EXAKT so im CV geschrieben sind. Gaengige Varianten sind erlaubt (z.B. "Roche" = "F. Hoffmann-La Roche"), aber FALSCHE Kombinationen zweier verschiedener Firmen (z.B. "Helvetia Baloise" wenn es zwei separate Firmen "Helvetia" und "Baloise" sind) sind ein schwerwiegender Verstoss.
 
 WICHTIG: Allgemeine Formulierungen wie "Erfahrung in X" sind OK wenn der CV X in irgendeiner Form bestaetigt.
 Nur KONKRETE falsche Behauptungen sind Verstoesse.
