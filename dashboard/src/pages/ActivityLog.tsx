@@ -42,7 +42,7 @@ export default function ActivityLogPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h1 className="text-lg font-semibold text-text">Aktivitaeten ({total})</h1>
         <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
           className="bg-navy border border-border rounded px-3 py-1.5 text-sm text-text">
@@ -69,13 +69,18 @@ export default function ActivityLogPage() {
           }
 
           return (
-            <div key={entry.id} className="flex items-center gap-3 px-4 py-3">
-              <Icon size={16} className="text-text-muted shrink-0" />
+            <div key={entry.id} className="flex items-start sm:items-center gap-3 px-3 md:px-4 py-3">
+              <Icon size={16} className="text-text-muted shrink-0 mt-0.5 sm:mt-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-sm text-text">{ACTION_LABELS[entry.action] || entry.action}</span>
-                {detail && <span className="text-sm text-text-muted ml-2 truncate">{detail}</span>}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+                  <span className="text-sm text-text">{ACTION_LABELS[entry.action] || entry.action}</span>
+                  {detail && <span className="text-xs sm:text-sm text-text-muted truncate">{detail}</span>}
+                </div>
+                <span className="text-xs font-mono text-text-muted sm:hidden">
+                  {time.toLocaleDateString('de-CH')} {time.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
-              <span className="text-xs font-mono text-text-muted shrink-0">
+              <span className="text-xs font-mono text-text-muted shrink-0 hidden sm:block">
                 {time.toLocaleDateString('de-CH')} {time.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>

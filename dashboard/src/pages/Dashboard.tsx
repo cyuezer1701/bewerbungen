@@ -74,21 +74,21 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
+          <div key={kpi.label} className="bg-card border border-border rounded-lg p-3 md:p-4">
+            <div className="flex items-center gap-2 mb-1 md:mb-2">
               <kpi.icon size={16} className="text-text-muted" />
               <span className="text-text-muted text-xs">{kpi.label}</span>
             </div>
-            <div className={`font-mono text-2xl font-bold ${kpi.color}`}>
+            <div className={`font-mono text-xl md:text-2xl font-bold ${kpi.color}`}>
               {typeof kpi.value === 'number' ? formatNum(kpi.value) : kpi.value}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Funnel Chart */}
         <div className="bg-card border border-border rounded-lg p-4">
           <h2 className="text-sm font-semibold text-text mb-4">Application Funnel</h2>
@@ -170,10 +170,10 @@ export default function Dashboard() {
                 } catch { detail = ''; }
               }
               return (
-                <div key={a.id} className="flex items-center gap-3 text-sm">
-                  <span className="font-mono text-text-muted text-xs w-24 shrink-0">{date} {time}</span>
+                <div key={a.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm py-1">
+                  <span className="font-mono text-text-muted text-xs shrink-0">{date} {time}</span>
                   <span className="text-text">{ACTION_LABELS[a.action] || a.action}</span>
-                  {detail && <span className="text-text-muted truncate">{detail}</span>}
+                  {detail && <span className="text-text-muted truncate text-xs sm:text-sm">{detail}</span>}
                 </div>
               );
             })}

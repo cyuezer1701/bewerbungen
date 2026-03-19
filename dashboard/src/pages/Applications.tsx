@@ -94,7 +94,7 @@ export default function Applications() {
       <h1 className="text-lg font-semibold text-text">Bewerbungen ({apps.length})</h1>
 
       {/* Mini funnel */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {COLUMNS.map((col) => {
           const count = apps.filter(a => mapToColumn(a.status) === col.id).length;
           return (
@@ -114,23 +114,25 @@ export default function Applications() {
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-6 gap-3">
-          {COLUMNS.map((col) => {
-            const columnApps = apps.filter(a => mapToColumn(a.status) === col.id);
-            return (
-              <div key={col.id} className={`bg-card border-t-2 ${col.color} rounded-lg p-2 min-h-[300px]`}>
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-xs font-semibold text-text-muted">{col.label}</span>
-                  <span className="text-xs text-text-muted">{columnApps.length}</span>
+        <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+          <div className="grid grid-cols-6 gap-3 min-w-[720px] md:min-w-0">
+            {COLUMNS.map((col) => {
+              const columnApps = apps.filter(a => mapToColumn(a.status) === col.id);
+              return (
+                <div key={col.id} className={`bg-card border-t-2 ${col.color} rounded-lg p-2 min-h-[200px] md:min-h-[300px]`}>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className="text-xs font-semibold text-text-muted">{col.label}</span>
+                    <span className="text-xs text-text-muted">{columnApps.length}</span>
+                  </div>
+                  <div className="space-y-2" id={col.id}>
+                    {columnApps.map((app) => (
+                      <AppCard key={app.id} app={app} onClick={() => navigate(`/applications/${app.id}`)} />
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2" id={col.id}>
-                  {columnApps.map((app) => (
-                    <AppCard key={app.id} app={app} onClick={() => navigate(`/applications/${app.id}`)} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </DndContext>
     </div>

@@ -104,15 +104,16 @@ export default function Jobs() {
         <button
           onClick={handleScrape}
           disabled={scraping}
-          className="flex items-center gap-2 bg-accent text-navy px-4 py-2 rounded text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          className="flex items-center gap-2 bg-accent text-navy px-3 md:px-4 py-2 rounded text-sm font-semibold hover:opacity-90 disabled:opacity-50"
         >
           <RefreshCw size={14} className={scraping ? 'animate-spin' : ''} />
-          {scraping ? 'Scraping...' : 'Jetzt scrapen'}
+          <span className="hidden sm:inline">{scraping ? 'Scraping...' : 'Jetzt scrapen'}</span>
+          <span className="sm:hidden">{scraping ? '...' : 'Scrape'}</span>
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 bg-card border border-border rounded-lg p-3">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 bg-card border border-border rounded-lg p-2 md:p-3">
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value); setPage(1); }}
@@ -123,26 +124,26 @@ export default function Jobs() {
           ))}
         </select>
 
-        <div className="flex items-center gap-1 bg-navy border border-border rounded px-2 py-1.5">
-          <Search size={14} className="text-text-muted" />
+        <div className="flex items-center gap-1 bg-navy border border-border rounded px-2 py-1.5 flex-1 min-w-[120px] md:flex-none">
+          <Search size={14} className="text-text-muted shrink-0" />
           <input
             type="text"
             placeholder="Suche..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="bg-transparent text-sm text-text outline-none w-48"
+            className="bg-transparent text-sm text-text outline-none w-full md:w-48"
           />
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-text-muted">
+        <div className="hidden md:flex items-center gap-2 text-xs text-text-muted">
           {SOURCES.map((s) => (
             <span key={s} className="px-2 py-1 bg-navy border border-border rounded">{s}</span>
           ))}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-card border border-border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-text-muted text-left">
@@ -233,6 +234,69 @@ export default function Jobs() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {jobs.map((job) => (
+          <div
+            key={job.id}
+            onClick={() => navigate(`/jobs/${job.id}`)}
+            className="bg-card border border-border rounded-lg p-3 active:bg-navy/50 cursor-pointer"
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text truncate">{job.title}</p>
+                <p className="text-xs text-text-muted truncate">{job.company} · {job.location || 'k.A.'}</p>
+              </div>
+              <span className={`font-mono text-lg font-bold shrink-0 ${scoreColor(job.match_score)}`}>
+                {job.match_score ?? '—'}
+              </span>
+            </div>
+            <div className="flex items-center flex-wrap gap-2 mb-2">
+              <span className="text-xs font-mono text-accent">
+                {job.salary_estimate_realistic
+                  ? `~${job.salary_currency} ${formatNum(job.salary_estimate_realistic)}`
+                  : job.salary_estimate_min
+                    ? `${job.salary_currency} ${formatNum(job.salary_estimate_min)}–${formatNum(job.salary_estimate_max!)}`
+                    : 'k.A.'}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                job.application_method === 'email' ? 'bg-blue-500/20 text-blue-400' :
+                job.application_method === 'both' ? 'bg-purple-500/20 text-purple-400' :
+                'bg-accent/20 text-accent'
+              }`}>
+                {job.application_method === 'email' ? '📧 Mail' : job.application_method === 'both' ? '📧📝' : '📝 Portal'}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                job.status === 'new' ? 'bg-accent/20 text-accent' :
+                job.status === 'applied' ? 'bg-blue-500/20 text-blue-400' :
+                job.status === 'interview' ? 'bg-warning/20 text-warning' :
+                job.status === 'rejected' ? 'bg-danger/20 text-danger' :
+                job.status === 'offer' ? 'bg-green-500/20 text-green-400' :
+                'bg-border text-text-muted'
+              }`}>{job.status}</span>
+            </div>
+            <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+              <span className="text-xs text-text-muted">{job.source} · {new Date(job.created_at + 'Z').toLocaleDateString('de-CH')}</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => handleApply(job.id)}
+                  className="text-xs px-2.5 py-1.5 bg-accent/20 text-accent rounded hover:bg-accent/30"
+                >Bewerben</button>
+                <button
+                  onClick={() => handleSkip(job.id)}
+                  className="text-xs px-2.5 py-1.5 bg-border text-text-muted rounded hover:bg-border/80"
+                >Skip</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {jobs.length === 0 && (
+          <div className="bg-card border border-border rounded-lg p-8 text-center text-text-muted">
+            Keine Jobs gefunden
+          </div>
+        )}
       </div>
 
       {/* Pagination */}

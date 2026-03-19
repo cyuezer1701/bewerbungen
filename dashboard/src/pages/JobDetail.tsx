@@ -94,9 +94,9 @@ export default function JobDetail() {
         <ArrowLeft size={14} /> Zurueck zu Jobs
       </button>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Description */}
-        <div className="col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           <div className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-start justify-between mb-3">
               <div>

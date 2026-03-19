@@ -53,7 +53,7 @@ export default function Analytics() {
     <div className="space-y-6">
       <h1 className="text-lg font-semibold text-text">Analytics</h1>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Funnel */}
         <div className="bg-card border border-border rounded-lg p-4">
           <h2 className="text-sm font-semibold text-text mb-4">Application Funnel</h2>

@@ -54,7 +54,7 @@ export default function SearchProfiles() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {profiles.map((p) => (
           <div key={p.id} className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-start justify-between mb-3">
@@ -103,7 +103,7 @@ export default function SearchProfiles() {
                   placeholder="DevOps, Cloud Engineer, SRE"
                   className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text mt-1" />
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="text-xs text-text-muted">Standort</label>
                   <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}

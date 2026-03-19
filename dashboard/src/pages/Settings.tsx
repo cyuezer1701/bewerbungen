@@ -141,7 +141,7 @@ export default function SettingsPage() {
         <Field label="E-Mail" settingKey="sender_email" />
         <Field label="Telefon" settingKey="sender_phone" />
         <Field label="Strasse" settingKey="sender_address_street" />
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Field label="PLZ" settingKey="sender_address_zip" />
           <Field label="Ort" settingKey="sender_address_city" />
         </div>
@@ -225,10 +225,10 @@ export default function SettingsPage() {
       <h1 className="text-lg font-semibold text-text">Einstellungen</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-card border border-border rounded-lg p-1">
+      <div className="flex gap-1 bg-card border border-border rounded-lg p-1 overflow-x-auto">
         {TABS.map((tab, i) => (
           <button key={tab} onClick={() => setActiveTab(i)}
-            className={`px-3 py-1.5 rounded text-xs transition ${activeTab === i ? 'bg-accent text-navy font-semibold' : 'text-text-muted hover:text-text'}`}>
+            className={`px-3 py-1.5 rounded text-xs transition whitespace-nowrap shrink-0 ${activeTab === i ? 'bg-accent text-navy font-semibold' : 'text-text-muted hover:text-text'}`}>
             {tab}
           </button>
         ))}

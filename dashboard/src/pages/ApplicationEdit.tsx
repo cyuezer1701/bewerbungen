@@ -90,9 +90,9 @@ export default function ApplicationEdit() {
         <ArrowLeft size={14} /> Zurueck zu Bewerbungen
       </button>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Editor */}
-        <div className="col-span-2 space-y-3">
+        <div className="lg:col-span-2 space-y-3">
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-text">
@@ -106,7 +106,7 @@ export default function ApplicationEdit() {
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full h-[500px] bg-navy border border-border rounded p-4 text-sm text-text font-sans leading-relaxed resize-none focus:outline-none focus:border-accent"
+              className="w-full h-[300px] md:h-[500px] bg-navy border border-border rounded p-3 md:p-4 text-sm text-text font-sans leading-relaxed resize-none focus:outline-none focus:border-accent"
             />
           </div>
 
@@ -133,7 +133,7 @@ export default function ApplicationEdit() {
           )}
 
           {/* Footer Actions */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={handleSave} disabled={saving}
               className="flex items-center gap-1 bg-accent text-navy px-4 py-2 rounded text-sm font-semibold hover:opacity-90 disabled:opacity-50">
               <Save size={14} /> {saving ? 'Speichere...' : 'Speichern'}
