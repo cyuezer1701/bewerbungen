@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
 import { getSetting } from '../db/settings.js';
 import { formatSwissDate } from './pdf-builder.js';
+import { fetchCompanyInfo } from '../utils/company-research.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 
@@ -15,6 +16,7 @@ REGELN:
 - Kein generischer Floskeln ("mit grossem Interesse habe ich...")
 - Direkt, selbstbewusst, konkret
 - Bezug auf spezifische Anforderungen aus der Stellenbeschreibung
+- Beziehe dich auf konkrete Firmenwerte oder Infos aus der FIRMENINFO, falls vorhanden
 - Erwaehne 2-3 konkrete Erfolge/Projekte aus dem CV die relevant sind
 - Laenge: ca. 250-350 Woerter
 - Keine Emojis, keine Aufzaehlungszeichen im Fliesstext
@@ -31,6 +33,9 @@ Titel: {title}
 Firma: {company}
 Ort: {location}
 Beschreibung: {description}
+
+FIRMENINFO (von der Firmenwebsite):
+{firmeninfo}
 
 FOKUS-EMPFEHLUNG VOM MATCHING:
 {focus}
@@ -55,12 +60,16 @@ export async function generateCoverLetter(
   const absender = absenderLines.join('\n');
   const datum = formatSwissDate();
 
+  // Fetch company info from website
+  const companyInfo = await fetchCompanyInfo(job.application_url || job.source_url || undefined);
+
   let prompt = COVER_LETTER_PROMPT
     .replace('{cv}', JSON.stringify(cv, null, 2))
     .replace('{title}', job.title)
     .replace('{company}', job.company)
     .replace('{location}', job.location || 'nicht angegeben')
     .replace('{description}', job.description || 'keine Beschreibung')
+    .replace('{firmeninfo}', companyInfo || 'Keine Firmeninfo verfuegbar')
     .replace('{focus}', focus)
     .replace('{datum}', datum)
     .replace('{absender}', absender);

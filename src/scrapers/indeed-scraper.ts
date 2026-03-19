@@ -1,5 +1,5 @@
 import type { Browser } from 'puppeteer';
-import { BaseScraper, type ScrapedJob, getRandomUserAgent } from './base-scraper.js';
+import { BaseScraper, type ScrapedJob, getRandomUserAgent, getRandomViewport } from './base-scraper.js';
 import { logger } from '../utils/logger.js';
 import { getJobBySourceId } from '../db/queries.js';
 
@@ -18,7 +18,8 @@ export class IndeedScraper extends BaseScraper {
 
     try {
       await page.setUserAgent(getRandomUserAgent());
-      await page.setViewport({ width: 1920, height: 1080 });
+      const vp = getRandomViewport();
+      await page.setViewport({ width: vp.width, height: vp.height });
 
       for (const keyword of keywords) {
         if (jobs.length >= maxJobs) break;
@@ -32,7 +33,7 @@ export class IndeedScraper extends BaseScraper {
         });
         if (!navigated) continue;
 
-        await this.delay(2000, 4000);
+        await this.delay(4000, 8000);
 
         // Check for CAPTCHA or block
         const pageContent = await page.content();
@@ -84,14 +85,14 @@ export class IndeedScraper extends BaseScraper {
             ? card.href
             : `https://ch.indeed.com${card.href}`;
 
-          await this.delay(3000, 5000);
+          await this.delay(4000, 8000);
 
           const detailNavigated = await this.safeGoto(page, detailUrl, {
             waitUntil: 'domcontentloaded',
           });
           if (!detailNavigated) continue;
 
-          await this.delay(1000, 2000);
+          await this.delay(3000, 6000);
 
           // Extract full description
           const description = await this.getTextContent(

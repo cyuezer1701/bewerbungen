@@ -1,6 +1,7 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { logger } from '../utils/logger.js';
 import { extractEmails } from '../utils/sanitize.js';
+import { getSetting } from '../db/settings.js';
 
 export interface ScrapedJob {
   sourceId: string;
@@ -97,22 +98,29 @@ export abstract class BaseScraper {
   }
 }
 
-// User agents for rotation
+// User agents for rotation (updated to current browser versions)
 const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
-  'Mozilla/5.0 (X11; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:126.0) Gecko/20100101 Firefox/126.0',
+  'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
 ];
 
 export function getRandomUserAgent(): string {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+// Randomized viewport dimensions for anti-fingerprinting
+export function getRandomViewport(): { width: number; height: number } {
+  const width = 1366 + Math.floor(Math.random() * (1920 - 1366));
+  const height = 768 + Math.floor(Math.random() * (1080 - 768));
+  return { width, height };
 }
 
 const BROWSER_ARGS = [
@@ -120,13 +128,22 @@ const BROWSER_ARGS = [
   '--disable-setuid-sandbox',
   '--disable-dev-shm-usage',
   '--disable-gpu',
-  '--window-size=1920,1080',
 ];
 
 function getBrowserOptions() {
+  const vp = getRandomViewport();
+  const args = [...BROWSER_ARGS, `--window-size=${vp.width},${vp.height}`];
+
+  // Add proxy if configured
+  const proxy = getSetting('scraper_proxy');
+  if (proxy) {
+    args.push(`--proxy-server=${proxy}`);
+    logger.info(`Browser using proxy: ${proxy}`);
+  }
+
   const opts: Record<string, unknown> = {
     headless: true,
-    args: BROWSER_ARGS,
+    args,
   };
   // Use system Chromium if PUPPETEER_EXECUTABLE_PATH is set (e.g. on ARM64 VPS)
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {

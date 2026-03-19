@@ -42,6 +42,7 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   scraper_linkedin_enabled: { value: 'true', encrypted: false },
   scraper_indeed_enabled: { value: 'true', encrypted: false },
   scraper_jobsch_enabled: { value: 'true', encrypted: false },
+  scraper_proxy: { value: '', encrypted: false },
   scraper_schedule: { value: config.CRON_SCHEDULE, encrypted: false },
   claude_model: { value: config.CLAUDE_MODEL, encrypted: false },
   claude_max_parallel: { value: '10', encrypted: false },
@@ -70,6 +71,7 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   followup_first_days: { value: '14', encrypted: false },
   followup_second_days: { value: '30', encrypted: false },
   followup_auto_reject_days: { value: '45', encrypted: false },
+  minimum_salary: { value: '0', encrypted: false },
   salary_currency_default: { value: 'CHF', encrypted: false },
   dashboard_port: { value: String(config.DASHBOARD_PORT), encrypted: false },
   dashboard_api_token: { value: config.DASHBOARD_API_TOKEN, encrypted: true },
@@ -96,6 +98,16 @@ export function initDefaultSettings(): void {
 
   if (count > 0) {
     logger.info(`Initialized ${count} default settings`);
+  }
+
+  // Migrate scraper_schedule from old default to new 2x daily schedule
+  if (existingKeys.has('scraper_schedule')) {
+    const currentSchedule = db.prepare('SELECT value FROM settings WHERE key = ?').get('scraper_schedule') as { value: string } | undefined;
+    if (currentSchedule?.value === '0 7 * * *') {
+      db.prepare("UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = ?")
+        .run('0 7,17 * * *', 'scraper_schedule');
+      logger.info('Migrated scraper_schedule from "0 7 * * *" to "0 7,17 * * *"');
+    }
   }
 }
 

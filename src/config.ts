@@ -36,7 +36,7 @@ const envSchema = z.object({
 
   // App
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-  CRON_SCHEDULE: z.string().default('0 7 * * *'),
+  CRON_SCHEDULE: z.string().default('0 7,17 * * *'),
   MAX_JOBS_PER_DAY: z.coerce.number().default(20),
 
   // Dashboard API

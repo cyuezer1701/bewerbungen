@@ -1,5 +1,5 @@
 import type { Browser } from 'puppeteer';
-import { BaseScraper, type ScrapedJob, getRandomUserAgent } from './base-scraper.js';
+import { BaseScraper, type ScrapedJob, getRandomUserAgent, getRandomViewport } from './base-scraper.js';
 import { logger } from '../utils/logger.js';
 import { getJobBySourceId } from '../db/queries.js';
 
@@ -18,10 +18,8 @@ export class LinkedInScraper extends BaseScraper {
 
     try {
       await page.setUserAgent(getRandomUserAgent());
-      await page.setViewport({
-        width: 1280 + Math.floor(Math.random() * 200),
-        height: 800 + Math.floor(Math.random() * 200),
-      });
+      const vp = getRandomViewport();
+      await page.setViewport({ width: vp.width, height: vp.height });
 
       for (const keyword of keywords) {
         if (jobs.length >= maxJobs) break;
@@ -35,7 +33,7 @@ export class LinkedInScraper extends BaseScraper {
         });
         if (!navigated) continue;
 
-        await this.delay(2000, 4000);
+        await this.delay(4000, 8000);
 
         // Check for CAPTCHA or auth wall
         const pageUrl = page.url();
@@ -50,17 +48,23 @@ export class LinkedInScraper extends BaseScraper {
           continue;
         }
 
-        // Scroll to load more jobs (3-5 times)
+        // Scroll to load more jobs (3-5 times) with random mouse moves
         const scrollCount = 3 + Math.floor(Math.random() * 3);
         for (let i = 0; i < scrollCount; i++) {
+          // Random mouse move before scrolling to appear more human
+          await page.mouse.move(
+            200 + Math.floor(Math.random() * 800),
+            200 + Math.floor(Math.random() * 400)
+          );
+          await this.delay(500, 1500);
           await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-          await this.delay(1500, 3000);
+          await this.delay(3000, 5000);
 
           // Click "See more jobs" button if present
           const seeMoreButton = await page.$('.infinite-scroller__show-more-button, button[aria-label="See more jobs"]');
           if (seeMoreButton) {
             await seeMoreButton.click().catch(() => {});
-            await this.delay(1000, 2000);
+            await this.delay(2000, 4000);
           }
         }
 
@@ -105,7 +109,7 @@ export class LinkedInScraper extends BaseScraper {
           }
 
           // Random delay between detail page visits
-          await this.delay(2000, 5000);
+          await this.delay(4000, 8000);
 
           // Navigate to detail page
           const detailUrl = card.href.startsWith('http')
@@ -118,7 +122,7 @@ export class LinkedInScraper extends BaseScraper {
           });
           if (!detailNavigated) continue;
 
-          await this.delay(1500, 3000);
+          await this.delay(3000, 6000);
 
           // Check for auth wall on detail page
           if (page.url().includes('/authwall') || page.url().includes('/login')) {

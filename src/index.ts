@@ -8,7 +8,7 @@ import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDue
 import { followUpKeyboard } from './bot/keyboards.js';
 import { initAlerter, alert } from './utils/alerter.js';
 import { setLastScrape, buildHealthLine } from './utils/health.js';
-import { initDefaultSettings } from './db/settings.js';
+import { initDefaultSettings, getSetting } from './db/settings.js';
 import { startApiServer } from './api/index.js';
 import { testTag } from './utils/test-mode.js';
 import cron from 'node-cron';
@@ -29,6 +29,11 @@ function buildDailyReport(scrapedCount: number, matchedCount: number): string {
 
   if (salary) {
     msg += `💰 Gehaltsspanne heute: ${salary.currency} ${formatNum(salary.min)} – ${formatNum(salary.max)}\n`;
+  }
+
+  const minSalary = parseInt(getSetting('minimum_salary') || '0', 10);
+  if (minSalary > 0) {
+    msg += `🚫 Mindestgehalt-Filter: CHF ${formatNum(minSalary)}\n`;
   }
 
   if (matchedJobs.length > 0) {
@@ -72,9 +77,10 @@ function main() {
   // Start REST API server (includes /api/health, replaces standalone health server)
   startApiServer();
 
-  // Setup cron job for daily scraping + matching + report
-  cron.schedule(config.CRON_SCHEDULE, async () => {
-    logger.info('Cron job triggered: starting daily pipeline...');
+  // Setup cron job for scraping + matching + report
+  const schedule = getSetting('scraper_schedule') || config.CRON_SCHEDULE;
+  cron.schedule(schedule, async () => {
+    logger.info('Cron job triggered: starting pipeline...');
     const telegramBot = getBot();
 
     try {
@@ -115,7 +121,7 @@ function main() {
     }
   });
 
-  logger.info(`Cron scheduled: ${config.CRON_SCHEDULE}`);
+  logger.info(`Cron scheduled: ${schedule}`);
   logger.info('AutoBewerber is running');
 }
 
