@@ -11,6 +11,7 @@ import { getStructuredCV } from '../../matching/cv-parser.js';
 import { generateCoverLetter } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { getActivityForJob } from '../../db/queries.js';
+import { researchCompany } from '../../matching/company-research.js';
 import {
   afterGeneratePortalKeyboard,
   afterGenerateEmailKeyboard,
@@ -65,7 +66,8 @@ export function registerEditHandlers(bot: Telegraf): void {
 
       const cv = await getStructuredCV();
       const focus = getCoverLetterFocus(job.id);
-      const newCoverLetter = await generateCoverLetter(job, cv, focus, feedback);
+      const companyResearch = await researchCompany(job.company, job.location || '');
+      const newCoverLetter = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
       const wordCount = newCoverLetter.split(/\s+/).length;
       const newVersion = existingApp.version + 1;
 

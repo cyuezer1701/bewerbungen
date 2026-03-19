@@ -44,6 +44,91 @@ Das System sucht täglich nach passenden Jobs, bewertet sie gegen den eigenen CV
 
 ---
 
+## Schweizer Bewerbungsstandards (Phase 12)
+
+### Firmenrecherche (`src/matching/company-research.ts`)
+- Wird NACH dem Matching und VOR der Anschreiben-Generierung aufgerufen
+- Nutzt Claude API mit Web Search Tool (`web_search_20250305`) um Firmeninfos zu recherchieren
+- Sucht: Vollstaendige Adresse (Strasse, PLZ, Ort), aktuelle News, Unternehmenskultur, Branche, Rechtsform
+- Ergebnis wird in `company_research` Tabelle gecacht (30 Tage gueltig)
+- Fallback: Wenn Web Search fehlschlaegt, wird nur der bekannte Firmenname + Ort verwendet
+
+### Kontaktperson + Referenznummer (Scraper-Extraktion)
+- `ScrapedJob` Interface erweitert: `contactPerson`, `contactGender` (f/m/unknown), `contactTitle`, `contactDepartment`, `referenceNumber`, `salaryRequestedInPosting`
+- Scraper suchen im Inserat-Text nach Patterns: "Kontakt:", "Ansprechperson:", Email-Patterns (vorname.nachname@)
+- Referenznummern: "Ref:", "Stellen-ID:", "Job-ID:", Pattern XX-YYYY-ZZZZ
+- Geschlecht wird ueber Vornamen-Datenbank (90 CH/DE Namen) bestimmt
+- `salary_requested_in_posting`: Erkennt ob Gehaltsvorstellung verlangt ("Gehaltsvorstellung", "Saläranspruch", etc.)
+
+### Anschreiben-Prompt (Schweizer Standard)
+- Absender oben rechts, Empfaenger links, Ortsdatum rechts
+- Persoenliche Anrede wenn Kontaktperson bekannt (Frau/Herr + Titel)
+- 4 Absaetze: Einstieg (Firmenbezug), Beweis (Erfolge mit Zahlen), Mehrwert (ueber Anforderungen hinaus), Schluss
+- Gehalt NUR wenn `salary_requested_in_posting == true`
+- Grussformel: "Freundliche Gruesse" (nicht "Mit freundlichen Gruessen")
+- Beilagen-Vermerk: "Beilagen: Lebenslauf, Arbeitszeugnisse"
+- Floskel-Blacklist: Automatische Pruefung nach Generierung, max 2 Retries
+
+### Floskel-Blacklist (`src/generator/blacklist.ts`)
+- 22 verbotene Floskeln (z.B. "hiermit bewerbe ich mich", "mit grossem interesse")
+- 4 Konjunktiv-Patterns (wuerde, koennte, moechte gerne, haette)
+- Nach jeder Generierung geprueft, bei Treffer automatisch neu generiert
+
+### Empfaenger-Adresse Validierung
+- Pflichtfelder: Firmenname, Strasse, PLZ, Ort
+- Wenn unvollstaendig: Bot zeigt Warnung + `/address` Command zur manuellen Ergaenzung
+- Bewerbung wird NICHT generiert bei fehlender Adresse
+
+### Absender-Daten Validierung
+- `/setup` Command fuer Ersteinrichtung: Name, Strasse, PLZ Ort, Telefon, Email
+- Bewerbung wird NICHT generiert bei fehlenden Absender-Daten
+
+### E-Mail Template (Begleitmail)
+- E-Mail ist NUR der Begleittext, NICHT das Anschreiben
+- Persoenliche Anrede basierend auf Kontaktperson
+- Referenznummer im Betreff und Text falls vorhanden
+- Betreff: "Bewerbung als {title} (Ref: {ref}) — {sender_name}"
+- Anschreiben ist NUR als PDF im Anhang
+
+### PDF Dokument-Reihenfolge
+1. Bewerbungsschreiben (generiert)
+2. Lebenslauf (cv.pdf)
+3. Arbeitszeugnisse (neuestes zuerst, aus `documents` Tabelle oder Filesystem)
+4. Diplome und Zertifikate
+5. Weiterbildungsnachweise
+
+### Neue DB Tabellen
+```sql
+-- company_research: Firmeninfos Cache (PK: company_name, 30 Tage gueltig)
+-- documents: Dokumente mit Kategorien (category: cv|zeugnis|diplom|weiterbildung, document_date, sort_order)
+```
+
+### Neue DB Felder (jobs Tabelle)
+- `contact_person`, `contact_gender`, `contact_title`, `contact_department`
+- `reference_number`
+- `salary_requested_in_posting` (BOOLEAN)
+
+### Neue Bot Commands
+- `/address <job_id> <strasse>, <plz> <ort>` — Firmenadresse manuell ergaenzen
+- `/setup <name> | <strasse> | <plz ort> | <telefon> | <email>` — Absender-Daten einrichten
+
+### Neue API Endpoints
+- `PATCH /api/jobs/:id/address` — Firmenadresse editieren (body: street, zip, city)
+- `POST /api/jobs/:id/research` — Firmenrecherche manuell triggern
+- `PATCH /api/documents/:id` — Dokument-Metadaten updaten (category, document_date, sort_order)
+
+### Neue Settings
+- `salary_expectation_min`, `salary_expectation_max`, `salary_expectation_ideal` — Gehaltsvorstellung
+- `sender_available_from` — Verfuegbarkeit (Default: "sofort")
+- `documents_order` — Reihenfolge der Beilagen
+
+### Generator Flow (aktualisiert)
+```
+Scrape -> Match -> [/apply] -> Research Company -> Validate Address -> Generate Cover Letter -> Check Blacklist -> Generate PDF -> Merge PDFs
+```
+
+---
+
 ## Verzeichnisstruktur
 
 ```
@@ -69,12 +154,14 @@ auto-bewerber/
 │   ├── matching/                      # Job Matching via Claude API
 │   │   ├── index.ts                   # Match Orchestrator
 │   │   ├── cv-parser.ts              # CV einlesen + strukturieren
-│   │   └── job-scorer.ts             # Claude API: Job vs CV Score + Gehaltsschätzung
+│   │   ├── job-scorer.ts             # Claude API: Job vs CV Score + Gehaltsschätzung
+│   │   └── company-research.ts       # Claude API + Web Search: Firmenrecherche mit DB Cache
 │   │
 │   ├── generator/                     # Bewerbungs-Generierung
 │   │   ├── index.ts                   # Generator Orchestrator
-│   │   ├── cover-letter.ts           # Claude API: Anschreiben generieren
-│   │   ├── pdf-builder.ts            # Puppeteer: HTML -> PDF
+│   │   ├── cover-letter.ts           # Claude API: Anschreiben generieren (Schweizer Standard)
+│   │   ├── blacklist.ts              # Floskel-Blacklist + Konjunktiv-Pruefung
+│   │   ├── pdf-builder.ts            # Puppeteer: HTML -> PDF, Dokument-Reihenfolge
 │   │   └── templates/
 │   │       ├── cover-letter.html     # HTML Template Anschreiben
 │   │       └── styles.css            # PDF Styles
@@ -87,6 +174,7 @@ auto-bewerber/
 │   │   │   ├── edit.ts               # /edit <id> — Anschreiben anpassen
 │   │   │   ├── send.ts              # /send <id> — Bewerbung per Mail abschicken
 │   │   │   ├── done.ts              # /done <id> — Portal-Bewerbung als gesendet markieren
+│   │   │   ├── address.ts           # /address + /setup — Adressen + Absender-Daten
 │   │   │   ├── status.ts            # /status — Tracking Dashboard
 │   │   │   └── settings.ts          # /settings — Suchkriterien ändern
 │   │   └── keyboards.ts             # Inline Keyboards für Telegram
@@ -255,8 +343,46 @@ CREATE TABLE jobs (
     match_score INTEGER,                    -- 0-100 via Claude API
     match_reasoning TEXT,                   -- Claude Begründung
     status TEXT DEFAULT 'new',              -- new | reviewed | applying | applied | interview | rejected | offer
+    contact_person TEXT,                    -- Kontaktperson aus Inserat
+    contact_gender TEXT,                    -- f | m | unknown
+    contact_title TEXT,                     -- Dr. | Prof. | null
+    contact_department TEXT,                -- z.B. "Human Resources"
+    reference_number TEXT,                  -- Referenznummer aus Inserat
+    salary_requested_in_posting INTEGER DEFAULT 0,  -- Ob Gehaltsvorstellung verlangt
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Firmenrecherche Cache
+CREATE TABLE company_research (
+    company_name TEXT PRIMARY KEY,
+    full_name TEXT,                         -- Inkl. Rechtsform (AG, GmbH, etc.)
+    street TEXT,
+    zip TEXT,
+    city TEXT,
+    country TEXT,
+    department TEXT,
+    industry TEXT,
+    employee_count TEXT,
+    culture_values TEXT,
+    recent_news TEXT,
+    relevant_projects TEXT,
+    website TEXT,
+    careers_page TEXT,
+    researched_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Dokumente mit Kategorien
+CREATE TABLE documents (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    category TEXT DEFAULT 'zeugnis',        -- cv | zeugnis | diplom | weiterbildung
+    document_date TEXT,                     -- Fuer chronologische Sortierung
+    sort_order INTEGER DEFAULT 0,
+    file_size INTEGER,
+    mime_type TEXT DEFAULT 'application/pdf',
+    uploaded_at TEXT DEFAULT (datetime('now'))
 );
 
 -- Generierte Bewerbungen
@@ -327,6 +453,12 @@ interface ScrapedJob {
     applicationMethod: 'email' | 'portal' | 'both';  // Wie man sich bewirbt
     applicationUrl?: string;                           // Direkt-Link zum Portal
     applicationEmail?: string;                         // E-Mail falls vorhanden
+    contactPerson?: string;                            // Kontaktperson aus Inserat
+    contactGender?: 'f' | 'm' | 'unknown';            // Geschlecht fuer Anrede
+    contactTitle?: string;                             // Dr., Prof.
+    contactDepartment?: string;                        // z.B. "Human Resources"
+    referenceNumber?: string;                          // Ref-Nr aus Inserat
+    salaryRequestedInPosting?: boolean;                // Gehaltsvorstellung verlangt?
 }
 
 abstract class BaseScraper {
@@ -511,6 +643,8 @@ Antwort als reiner Text (kein Markdown), bereit für PDF-Generierung.
 | `/search list` | Aktive Suchprofile anzeigen |
 | `/search remove <id>` | Suchprofil deaktivieren |
 | `/update <id> <status>` | Job-Status manuell ändern (interview, rejected, offer) |
+| `/address <id> <adresse>` | Firmenadresse manuell ergaenzen |
+| `/setup <daten>` | Absender-Daten einrichten (Name, Adresse, Tel, Email) |
 
 **Job-Karte Format (IMMER so anzeigen):**
 ```
@@ -601,8 +735,8 @@ Bot: ✅ Bewerbung #42 ready!
 **Inline Keyboards (kontextabhängig):**
 - Job-Liste: [Details] [Bewerben] [Skip]
 - Nach Generierung (Portal): [Preview] [PDF herunterladen] [Bearbeiten]
-- Nach Generierung (E-Mail): [Preview] [Per Mail senden] [Bearbeiten]
-- Nach Generierung (Beides): [Per Mail senden] [Portal + PDF] [Bearbeiten]
+- Nach Generierung (E-Mail): [PDF herunterladen] [Per Mail senden] [Bearbeiten]
+- Nach Generierung (Beides): [PDF herunterladen] [Per Mail senden] [Portal + PDF] [Bearbeiten]
 - Nach Absendung: [Interview erhalten] [Absage erhalten] [Angebot erhalten]
 - Follow-up Reminder: [Status updaten] [Nachfassen] [Archivieren]
 
@@ -679,6 +813,8 @@ PATCH  /api/jobs/:id                — Status updaten, Notizen hinzufügen
 DELETE /api/jobs/:id                — Job löschen (soft delete)
 POST   /api/jobs/scrape-now         — Manuellen Scraper-Durchlauf triggern
 POST   /api/jobs/:id/rematch        — Job neu bewerten lassen (Claude API)
+PATCH  /api/jobs/:id/address        — Firmenadresse editieren
+POST   /api/jobs/:id/research       — Firmenrecherche manuell triggern
 
 # Bewerbungen
 GET    /api/applications            — Liste (Filter: status, sort, page)
@@ -699,6 +835,7 @@ DELETE /api/search-profiles/:id     — Profil löschen
 # Dokumente
 GET    /api/documents               — Liste aller Dokumente (CV, Zeugnisse)
 POST   /api/documents/upload        — Datei hochladen (multipart/form-data)
+PATCH  /api/documents/:id            — Dokument-Metadaten updaten (category, date, order)
 DELETE /api/documents/:filename     — Dokument löschen
 GET    /api/documents/:filename     — Dokument herunterladen
 POST   /api/documents/reparse-cv    — CV neu parsen lassen (Claude API)
@@ -787,7 +924,11 @@ interface AppSettings {
     salary_expectation_min: number;       // Dein Minimum
     salary_expectation_max: number;       // Dein Maximum
     salary_expectation_ideal: number;     // Dein Ideal
-    
+
+    // Verfuegbarkeit + Dokumente
+    sender_available_from: string;        // "sofort" oder Datum
+    documents_order: string;              // Komma-getrennt: cover_letter,cv,zeugnisse,diplome,weiterbildungen
+
     // Dashboard
     dashboard_port: number;               // Default: 3333
     dashboard_api_token: string;          // Verschlüsselt gespeichert

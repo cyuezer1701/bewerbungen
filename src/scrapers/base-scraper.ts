@@ -33,6 +33,12 @@ export interface ScrapedJob {
   applicationMethod: 'email' | 'portal' | 'both';
   applicationUrl?: string;
   applicationEmail?: string;
+  contactPerson?: string;
+  contactGender?: 'f' | 'm' | 'unknown';
+  contactTitle?: string;
+  contactDepartment?: string;
+  referenceNumber?: string;
+  salaryRequestedInPosting?: boolean;
 }
 
 export abstract class BaseScraper {
@@ -113,6 +119,103 @@ export abstract class BaseScraper {
       return '';
     }
   }
+
+  protected extractContactInfo(text: string): {
+    contactPerson?: string;
+    contactGender?: 'f' | 'm' | 'unknown';
+    contactTitle?: string;
+    contactDepartment?: string;
+  } {
+    const patterns = [
+      /(?:Kontakt|Ansprechperson|Ihre Kontaktperson|Kontaktieren Sie|Your contact|Contact person)[:\s]+(?:(Dr\.|Prof\.)\s+)?([A-ZÄÖÜ][a-zäöüéèê]+\s+[A-ZÄÖÜ][a-zäöüéèê]+)/i,
+      /(?:Fragen|questions)\??\s*(?:an|to|bei)?\s*(?:(Dr\.|Prof\.)\s+)?([A-ZÄÖÜ][a-zäöüéèê]+\s+[A-ZÄÖÜ][a-zäöüéèê]+)/i,
+    ];
+
+    let person: string | undefined;
+    let title: string | undefined;
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        title = match[1] || undefined;
+        person = match[2]?.trim();
+        break;
+      }
+    }
+
+    // Also try to detect from email pattern: vorname.nachname@
+    if (!person) {
+      const emailMatch = text.match(/([a-zäöü]+)\.([a-zäöü]+)@/i);
+      if (emailMatch) {
+        const first = emailMatch[1].charAt(0).toUpperCase() + emailMatch[1].slice(1).toLowerCase();
+        const last = emailMatch[2].charAt(0).toUpperCase() + emailMatch[2].slice(1).toLowerCase();
+        person = `${first} ${last}`;
+      }
+    }
+
+    let gender: 'f' | 'm' | 'unknown' = 'unknown';
+    if (person) {
+      const firstName = person.split(/\s+/)[0].toLowerCase();
+      gender = guessGender(firstName);
+    }
+
+    // Extract department
+    let department: string | undefined;
+    const deptMatch = text.match(/(?:Abteilung|Department|Bereich)[:\s]+([^\n,]+)/i);
+    if (deptMatch) {
+      department = deptMatch[1].trim();
+    } else if (/human\s*resources|HR|personalabteilung|recruiting/i.test(text)) {
+      department = 'Human Resources';
+    }
+
+    return { contactPerson: person, contactGender: gender, contactTitle: title, contactDepartment: department };
+  }
+
+  protected extractReferenceNumber(text: string): string | undefined {
+    const patterns = [
+      /(?:Ref\.?\s*(?:Nr\.?)?|Referenz(?:nummer)?|Stellen-?ID|Job-?ID|Kennziffer|Kennzahl)[:\s]+([A-Z0-9][\w-]{2,20})/i,
+      /\b([A-Z]{2,4}-\d{4}-\d{3,6})\b/,
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) return match[1].trim();
+    }
+    return undefined;
+  }
+
+  protected detectSalaryRequested(text: string): boolean {
+    const patterns = [
+      /gehaltsvorstellung/i,
+      /lohnvorstellung/i,
+      /sal[aä]r(?:anspruch|vorstellung)/i,
+      /finanziellen?\s+vorstellung/i,
+      /gew[üu]nschtes?\s+(?:jahres)?gehalt/i,
+      /salary\s+expectation/i,
+    ];
+    return patterns.some(p => p.test(text));
+  }
+}
+
+const FEMALE_NAMES = new Set([
+  'anna', 'maria', 'sarah', 'sandra', 'claudia', 'monika', 'petra', 'andrea', 'christine',
+  'nicole', 'daniela', 'katharina', 'julia', 'stefanie', 'martina', 'sabine', 'barbara',
+  'susanne', 'simone', 'karin', 'cornelia', 'silvia', 'eva', 'ruth', 'elisabeth', 'ursula',
+  'verena', 'brigitte', 'franziska', 'corinne', 'nadine', 'melanie', 'manuela', 'jasmin',
+  'laura', 'lisa', 'nina', 'sophie', 'lena', 'emma', 'mia', 'lea', 'nathalie', 'céline',
+]);
+const MALE_NAMES = new Set([
+  'peter', 'hans', 'thomas', 'daniel', 'martin', 'michael', 'markus', 'stefan', 'christian',
+  'andreas', 'marco', 'patrick', 'reto', 'david', 'simon', 'pascal', 'felix', 'beat',
+  'bruno', 'walter', 'werner', 'kurt', 'paul', 'jan', 'marc', 'lukas', 'tim', 'tobias',
+  'philipp', 'oliver', 'sandro', 'roger', 'marcel', 'adrian', 'florian', 'nico', 'jonas',
+  'alex', 'matthias', 'dominik', 'samuel', 'benjamin', 'raphael', 'fabian', 'yannick',
+]);
+
+function guessGender(firstName: string): 'f' | 'm' | 'unknown' {
+  const lower = firstName.toLowerCase();
+  if (FEMALE_NAMES.has(lower)) return 'f';
+  if (MALE_NAMES.has(lower)) return 'm';
+  return 'unknown';
 }
 
 // User agents for rotation (updated to current browser versions)

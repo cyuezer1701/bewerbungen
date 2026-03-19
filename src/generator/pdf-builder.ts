@@ -204,6 +204,47 @@ export async function generateCoverLetterPDF(
   }
 }
 
+async function addPdfToDoc(mergedDoc: PDFDocument, filePath: string, label: string): Promise<void> {
+  try {
+    const bytes = fs.readFileSync(filePath);
+    const doc = await PDFDocument.load(bytes);
+    const pages = await mergedDoc.copyPages(doc, doc.getPageIndices());
+    for (const page of pages) {
+      mergedDoc.addPage(page);
+    }
+    logger.info(`${label} added: ${path.basename(filePath)}`);
+  } catch (err) {
+    logger.warn(`Failed to add ${label} ${path.basename(filePath)}`, { error: err });
+  }
+}
+
+function getDocumentsByCategory(category: string): string[] {
+  // Try DB first for ordered documents
+  try {
+    const { getDb } = require('../db/index.js');
+    const db = getDb();
+    const rows = db.prepare(
+      'SELECT filename FROM documents WHERE category = ? ORDER BY document_date DESC, sort_order ASC'
+    ).all(category) as Array<{ filename: string }>;
+    if (rows.length > 0) {
+      return rows
+        .map(r => path.join(config.ZEUGNISSE_DIR, r.filename))
+        .filter(p => fs.existsSync(p));
+    }
+  } catch {
+    // DB not available or table doesn't exist yet
+  }
+  return [];
+}
+
+function getPdfFilesFromDir(dirPath: string): string[] {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath)
+    .filter(f => f.toLowerCase().endsWith('.pdf'))
+    .sort()
+    .map(f => path.join(dirPath, f));
+}
+
 export async function mergeApplicationPDFs(
   coverLetterPath: string,
   outputDir: string,
@@ -211,51 +252,40 @@ export async function mergeApplicationPDFs(
 ): Promise<string> {
   const mergedDoc = await PDFDocument.create();
 
-  // 1. Add cover letter
-  const coverLetterBytes = fs.readFileSync(coverLetterPath);
-  const coverLetterDoc = await PDFDocument.load(coverLetterBytes);
-  const coverPages = await mergedDoc.copyPages(coverLetterDoc, coverLetterDoc.getPageIndices());
-  for (const page of coverPages) {
-    mergedDoc.addPage(page);
-  }
+  // 1. Bewerbungsschreiben (generiert)
+  await addPdfToDoc(mergedDoc, coverLetterPath, 'Cover letter');
 
-  // 2. Add CV if exists
+  // 2. Lebenslauf (cv.pdf)
   if (fs.existsSync(config.CV_PATH)) {
-    try {
-      const cvBytes = fs.readFileSync(config.CV_PATH);
-      const cvDoc = await PDFDocument.load(cvBytes);
-      const cvPages = await mergedDoc.copyPages(cvDoc, cvDoc.getPageIndices());
-      for (const page of cvPages) {
-        mergedDoc.addPage(page);
-      }
-      logger.info('CV added to merged PDF');
-    } catch (err) {
-      logger.warn('Failed to add CV to merged PDF', { error: err });
-    }
+    await addPdfToDoc(mergedDoc, config.CV_PATH, 'CV');
   } else {
     logger.info('No CV PDF found, skipping in merge');
   }
 
-  // 3. Add Zeugnisse if directory exists and has files
-  if (fs.existsSync(config.ZEUGNISSE_DIR)) {
-    const zeugnisFiles = fs.readdirSync(config.ZEUGNISSE_DIR)
-      .filter((f) => f.toLowerCase().endsWith('.pdf'))
-      .sort();
-
-    for (const file of zeugnisFiles) {
-      try {
-        const filePath = path.join(config.ZEUGNISSE_DIR, file);
-        const bytes = fs.readFileSync(filePath);
-        const doc = await PDFDocument.load(bytes);
-        const pages = await mergedDoc.copyPages(doc, doc.getPageIndices());
-        for (const page of pages) {
-          mergedDoc.addPage(page);
-        }
-        logger.info(`Zeugnis added: ${file}`);
-      } catch (err) {
-        logger.warn(`Failed to add Zeugnis ${file}`, { error: err });
-      }
+  // 3. Arbeitszeugnisse (neuestes zuerst)
+  const zeugnisse = getDocumentsByCategory('zeugnis');
+  if (zeugnisse.length > 0) {
+    for (const file of zeugnisse) {
+      await addPdfToDoc(mergedDoc, file, 'Zeugnis');
     }
+  } else if (fs.existsSync(config.ZEUGNISSE_DIR)) {
+    // Fallback: read all PDFs from zeugnisse directory
+    const files = getPdfFilesFromDir(config.ZEUGNISSE_DIR);
+    for (const file of files) {
+      await addPdfToDoc(mergedDoc, file, 'Zeugnis');
+    }
+  }
+
+  // 4. Diplome und Zertifikate
+  const diplome = getDocumentsByCategory('diplom');
+  for (const file of diplome) {
+    await addPdfToDoc(mergedDoc, file, 'Diplom');
+  }
+
+  // 5. Weiterbildungsnachweise
+  const weiterbildungen = getDocumentsByCategory('weiterbildung');
+  for (const file of weiterbildungen) {
+    await addPdfToDoc(mergedDoc, file, 'Weiterbildung');
   }
 
   // Save merged PDF

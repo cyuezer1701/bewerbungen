@@ -3,6 +3,7 @@ import type { Telegraf } from 'telegraf';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
+import { getSetting } from '../../db/settings.js';
 import {
   getJobById,
   insertApplication,
@@ -13,8 +14,9 @@ import {
   getActivityForJob,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
-import { generateCoverLetter } from '../../generator/cover-letter.js';
+import { generateCoverLetter, buildRecipientAddress, validateRecipientAddress } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
+import { researchCompany } from '../../matching/company-research.js';
 import {
   afterGeneratePortalKeyboard,
   afterGenerateEmailKeyboard,
@@ -47,6 +49,16 @@ function formatNum(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
 }
 
+function checkSenderComplete(): string[] {
+  const missing: string[] = [];
+  if (!getSetting('sender_name')) missing.push('Name');
+  if (!getSetting('sender_address_street')) missing.push('Strasse');
+  if (!getSetting('sender_address_zip')) missing.push('PLZ');
+  if (!getSetting('sender_address_city')) missing.push('Ort');
+  if (!getSetting('sender_email')) missing.push('E-Mail');
+  return missing;
+}
+
 async function handleApply(jobId: string, replyFn: (text: string, extra?: unknown) => Promise<unknown>) {
   const job = getJobById(jobId);
   if (!job) {
@@ -54,11 +66,40 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
     return;
   }
 
-  await replyFn(`📄 Anschreiben fuer "${job.title}" @ ${job.company} wird generiert...`);
+  // Check sender data
+  const senderMissing = checkSenderComplete();
+  if (senderMissing.length > 0) {
+    await replyFn(
+      `⚠️ Absender-Daten unvollstaendig. Fehlend: ${senderMissing.join(', ')}\n\n` +
+      `Bitte richte deine Daten ein:\n` +
+      `/setup Max Muster | Musterstrasse 12 | 8000 Zuerich | +41 XX XXX XX XX | max@email.com`
+    );
+    return;
+  }
+
+  await replyFn(`📄 Anschreiben fuer "${job.title}" @ ${job.company} wird generiert...\n🔍 Firmenrecherche laeuft...`);
+
+  // Research company (cached or fresh)
+  const companyResearch = await researchCompany(job.company, job.location || '');
+
+  // Validate recipient address
+  const recipient = buildRecipientAddress(job, companyResearch);
+  const validation = validateRecipientAddress(recipient);
+
+  if (!validation.valid) {
+    await replyFn(
+      `⚠️ Firmenadresse unvollstaendig. Fehlend: ${validation.missing.join(', ')}\n\n` +
+      `Gefunden: ${companyResearch.company_full_name || job.company}` +
+      (companyResearch.street ? `\n${companyResearch.street}` : '') +
+      (companyResearch.zip || companyResearch.city ? `\n${[companyResearch.zip, companyResearch.city].filter(Boolean).join(' ')}` : '') +
+      `\n\nBitte ergaenze manuell:\n/address ${jobId} Strasse Nr, PLZ Ort`
+    );
+    return;
+  }
 
   const cv = await getStructuredCV();
   const focus = getCoverLetterFocus(job.id);
-  const coverLetter = await generateCoverLetter(job, cv, focus);
+  const coverLetter = await generateCoverLetter(job, cv, focus, companyResearch);
   const wordCount = coverLetter.split(/\s+/).length;
 
   // Save application
@@ -82,6 +123,8 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
       word_count: wordCount,
       pdf_path: pdfPath,
       full_package_path: fullPackagePath,
+      company_researched: !!companyResearch.company_full_name,
+      address_complete: validation.valid,
     }));
   } catch (err) {
     logger.error('PDF generation failed, continuing with text only', { error: err });
@@ -90,9 +133,19 @@ async function handleApply(jobId: string, replyFn: (text: string, extra?: unknow
   }
 
   // Build confirmation message
-  let msg = `✅ Bewerbung ready!\n📌 ${job.title} @ ${job.company}\n`;
+  let msg = `✅ Bewerbung ready!\n📌 ${job.title} @ ${companyResearch.company_full_name || job.company}\n`;
+  if (companyResearch.street) msg += `📍 ${companyResearch.street}, ${companyResearch.zip} ${companyResearch.city}\n`;
   if (job.salary_estimate_realistic) {
     msg += `💰 ~${job.salary_currency || 'CHF'} ${formatNum(job.salary_estimate_realistic)}\n`;
+  }
+  if (job.contact_person) {
+    msg += `👤 ${job.contact_title ? job.contact_title + ' ' : ''}${job.contact_person}\n`;
+  }
+  if (job.reference_number) {
+    msg += `🔖 Ref: ${job.reference_number}\n`;
+  }
+  if (job.salary_requested_in_posting) {
+    msg += `💰 Gehaltsangabe im Inserat verlangt — wird ins Anschreiben aufgenommen\n`;
   }
   if (job.application_email) msg += `📧 ${job.application_email}\n`;
   if (job.application_url) msg += `🔗 ${job.application_url}\n`;

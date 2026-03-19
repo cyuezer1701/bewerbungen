@@ -34,7 +34,28 @@ export function initDatabase(): void {
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   _db.exec(schema);
 
+  // Run migrations for existing databases
+  runMigrations(_db);
+
   logger.info(`Database initialized at ${config.DB_PATH}`);
+}
+
+function runMigrations(db: Database.Database): void {
+  const jobCols = (db.pragma('table_info(jobs)') as Array<{ name: string }>).map(c => c.name);
+  const newJobCols: Array<{ name: string; type: string }> = [
+    { name: 'contact_person', type: 'TEXT' },
+    { name: 'contact_gender', type: 'TEXT' },
+    { name: 'contact_title', type: 'TEXT' },
+    { name: 'contact_department', type: 'TEXT' },
+    { name: 'reference_number', type: 'TEXT' },
+    { name: 'salary_requested_in_posting', type: 'INTEGER DEFAULT 0' },
+  ];
+  for (const col of newJobCols) {
+    if (!jobCols.includes(col.name)) {
+      db.exec(`ALTER TABLE jobs ADD COLUMN ${col.name} ${col.type}`);
+      logger.info(`Migration: added jobs.${col.name}`);
+    }
+  }
 }
 
 export function closeDatabase(): void {

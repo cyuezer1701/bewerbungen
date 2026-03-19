@@ -77,6 +77,11 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   dashboard_api_token: { value: config.DASHBOARD_API_TOKEN, encrypted: true },
   test_mode: { value: 'false', encrypted: false },
   test_mode_email: { value: '', encrypted: false },
+  salary_expectation_min: { value: '0', encrypted: false },
+  salary_expectation_max: { value: '0', encrypted: false },
+  salary_expectation_ideal: { value: '0', encrypted: false },
+  sender_available_from: { value: 'sofort', encrypted: false },
+  documents_order: { value: 'cover_letter,cv,zeugnisse,diplome,weiterbildungen', encrypted: false },
 };
 
 export function initDefaultSettings(): void {

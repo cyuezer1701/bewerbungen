@@ -116,6 +116,10 @@ export class LinkedInScraper extends BaseScraper {
             detailUrl
           );
 
+          const contactInfo = this.extractContactInfo(description);
+          const referenceNumber = this.extractReferenceNumber(description);
+          const salaryRequestedInPosting = this.detectSalaryRequested(description);
+
           const job: ScrapedJob = {
             sourceId: card.sourceId,
             source: 'linkedin',
@@ -128,6 +132,9 @@ export class LinkedInScraper extends BaseScraper {
             applicationMethod: method,
             applicationUrl: url || detailUrl,
             applicationEmail: email,
+            ...contactInfo,
+            referenceNumber,
+            salaryRequestedInPosting,
           };
 
           jobs.push(job);

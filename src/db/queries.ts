@@ -24,6 +24,12 @@ export interface JobRow {
   match_score: number | null;
   match_reasoning: string | null;
   status: string;
+  contact_person: string | null;
+  contact_gender: string | null;
+  contact_title: string | null;
+  contact_department: string | null;
+  reference_number: string | null;
+  salary_requested_in_posting: number;
   created_at: string;
   updated_at: string;
 }
@@ -82,13 +88,23 @@ export function insertJob(job: {
   application_url?: string;
   application_email?: string;
   posted_at?: string;
+  contact_person?: string;
+  contact_gender?: string;
+  contact_title?: string;
+  contact_department?: string;
+  reference_number?: string;
+  salary_requested_in_posting?: boolean;
 }): void {
   const db = getDb();
   db.prepare(`
     INSERT INTO jobs (id, source, source_id, source_url, title, company, location, description,
-                      salary_range, application_method, application_url, application_email, posted_at)
+                      salary_range, application_method, application_url, application_email, posted_at,
+                      contact_person, contact_gender, contact_title, contact_department,
+                      reference_number, salary_requested_in_posting)
     VALUES (@id, @source, @source_id, @source_url, @title, @company, @location, @description,
-            @salary_range, @application_method, @application_url, @application_email, @posted_at)
+            @salary_range, @application_method, @application_url, @application_email, @posted_at,
+            @contact_person, @contact_gender, @contact_title, @contact_department,
+            @reference_number, @salary_requested_in_posting)
   `).run({
     id: job.id,
     source: job.source,
@@ -103,7 +119,31 @@ export function insertJob(job: {
     application_url: job.application_url ?? null,
     application_email: job.application_email ?? null,
     posted_at: job.posted_at ?? null,
+    contact_person: job.contact_person ?? null,
+    contact_gender: job.contact_gender ?? null,
+    contact_title: job.contact_title ?? null,
+    contact_department: job.contact_department ?? null,
+    reference_number: job.reference_number ?? null,
+    salary_requested_in_posting: job.salary_requested_in_posting ? 1 : 0,
   });
+}
+
+export function updateJobAddress(
+  id: string,
+  contactPerson?: string,
+  contactGender?: string,
+  contactTitle?: string
+): void {
+  const db = getDb();
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  if (contactPerson !== undefined) { updates.push('contact_person = ?'); params.push(contactPerson); }
+  if (contactGender !== undefined) { updates.push('contact_gender = ?'); params.push(contactGender); }
+  if (contactTitle !== undefined) { updates.push('contact_title = ?'); params.push(contactTitle); }
+  if (updates.length === 0) return;
+  updates.push("updated_at = datetime('now')");
+  params.push(id);
+  db.prepare(`UPDATE jobs SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 }
 
 export function getJobById(id: string): JobRow | undefined {

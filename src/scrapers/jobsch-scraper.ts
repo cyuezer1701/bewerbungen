@@ -158,6 +158,10 @@ export class JobsChScraper extends BaseScraper {
               applicationUrl || detailUrl
             );
 
+            const contactInfo = this.extractContactInfo(description || '');
+            const referenceNumber = this.extractReferenceNumber(description || '');
+            const salaryRequestedInPosting = this.detectSalaryRequested(description || '');
+
             const job: ScrapedJob = {
               sourceId: card.sourceId,
               source: 'jobsch',
@@ -169,6 +173,9 @@ export class JobsChScraper extends BaseScraper {
               applicationMethod: method,
               applicationUrl: url,
               applicationEmail: email,
+              ...contactInfo,
+              referenceNumber,
+              salaryRequestedInPosting,
             };
 
             jobs.push(job);

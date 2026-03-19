@@ -160,6 +160,12 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
         application_url: job.applicationUrl,
         application_email: job.applicationEmail,
         posted_at: job.postedAt,
+        contact_person: job.contactPerson,
+        contact_gender: job.contactGender,
+        contact_title: job.contactTitle,
+        contact_department: job.contactDepartment,
+        reference_number: job.referenceNumber,
+        salary_requested_in_posting: job.salaryRequestedInPosting,
       });
       logActivity(id, null, 'scraped', JSON.stringify({
         source: job.source,

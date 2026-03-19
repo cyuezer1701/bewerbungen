@@ -8,6 +8,7 @@ import { registerEditHandlers } from './handlers/edit.js';
 import { registerStatusHandlers } from './handlers/status.js';
 import { registerSearchHandlers } from './handlers/search.js';
 import { registerSendHandlers } from './handlers/send.js';
+import { registerAddressHandlers } from './handlers/address.js';
 import { isTestMode, toggleTestMode, getTestEmail, testTag } from '../utils/test-mode.js';
 import { runScrapers } from '../scrapers/index.js';
 import { runMatching } from '../matching/index.js';
@@ -38,6 +39,8 @@ export function createBot(): Telegraf {
       `/edit <id> <feedback> — Anschreiben ueberarbeiten\n` +
       `/send <id> — Bewerbung per Mail abschicken\n` +
       `/done <id> — Portal Bewerbung als gesendet markieren\n` +
+      `/address <id> <adresse> — Firmenadresse ergaenzen\n` +
+      `/setup <daten> — Absender-Daten einrichten\n` +
       `/status — Tracking Dashboard\n` +
       `/stats — Statistiken\n` +
       `/search add|list|remove — Suchprofile verwalten\n` +
@@ -75,6 +78,7 @@ export function createBot(): Telegraf {
   registerStatusHandlers(bot);
   registerSearchHandlers(bot);
   registerSendHandlers(bot);
+  registerAddressHandlers(bot);
 
   // /testmode — toggle test mode
   bot.command('testmode', (ctx) => {

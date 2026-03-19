@@ -91,6 +91,10 @@ export class IndeedScraper extends BaseScraper {
               item.sourceUrl
             );
 
+            const contactInfo = this.extractContactInfo(description);
+            const referenceNumber = this.extractReferenceNumber(description);
+            const salaryRequestedInPosting = this.detectSalaryRequested(description);
+
             const job: ScrapedJob = {
               sourceId: item.sourceId,
               source: 'indeed',
@@ -103,6 +107,9 @@ export class IndeedScraper extends BaseScraper {
               applicationMethod: method,
               applicationUrl: url || item.sourceUrl,
               applicationEmail: email,
+              ...contactInfo,
+              referenceNumber,
+              salaryRequestedInPosting,
             };
 
             jobs.push(job);

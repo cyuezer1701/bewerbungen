@@ -24,8 +24,46 @@ CREATE TABLE IF NOT EXISTS jobs (
     match_score INTEGER,
     match_reasoning TEXT,
     status TEXT DEFAULT 'new',
+    contact_person TEXT,
+    contact_gender TEXT,
+    contact_title TEXT,
+    contact_department TEXT,
+    reference_number TEXT,
+    salary_requested_in_posting INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Firmenrecherche Cache
+CREATE TABLE IF NOT EXISTS company_research (
+    company_name TEXT PRIMARY KEY,
+    full_name TEXT,
+    street TEXT,
+    zip TEXT,
+    city TEXT,
+    country TEXT,
+    department TEXT,
+    industry TEXT,
+    employee_count TEXT,
+    culture_values TEXT,
+    recent_news TEXT,
+    relevant_projects TEXT,
+    website TEXT,
+    careers_page TEXT,
+    researched_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Dokumente mit Kategorien
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    category TEXT DEFAULT 'zeugnis',
+    document_date TEXT,
+    sort_order INTEGER DEFAULT 0,
+    file_size INTEGER,
+    mime_type TEXT DEFAULT 'application/pdf',
+    uploaded_at TEXT DEFAULT (datetime('now'))
 );
 
 -- Generierte Bewerbungen

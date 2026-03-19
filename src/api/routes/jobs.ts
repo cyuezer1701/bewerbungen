@@ -7,6 +7,7 @@ import { scoreJob } from '../../matching/job-scorer.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
 import { updateJobMatchScore, updateJobSalaryEstimate } from '../../db/queries.js';
 import { logger } from '../../utils/logger.js';
+import { researchCompany, updateResearchAddress } from '../../matching/company-research.js';
 import type { JobRow } from '../../db/queries.js';
 
 export const jobsRouter = Router();
@@ -94,6 +95,35 @@ jobsRouter.post('/scrape-now', async (req, res) => {
   } catch (err) {
     logger.error('Manual scrape failed', { error: err });
     res.status(500).json({ error: err instanceof Error ? err.message : 'Scrape failed' });
+  }
+});
+
+// PATCH /api/jobs/:id/address — Update company address
+jobsRouter.patch('/:id/address', (req, res) => {
+  const job = getJobById(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  const { street, zip, city } = req.body;
+  if (!street || !zip || !city) {
+    return res.status(400).json({ error: 'street, zip, and city are required' });
+  }
+
+  updateResearchAddress(job.company, street, zip, city);
+  logActivity(req.params.id, null, 'status_changed', JSON.stringify({ action: 'address_updated', street, zip, city, via: 'api' }));
+  res.json({ ok: true, company: job.company, street, zip, city });
+});
+
+// POST /api/jobs/:id/research — Trigger company research
+jobsRouter.post('/:id/research', async (req, res) => {
+  const job = getJobById(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  try {
+    const research = await researchCompany(job.company, job.location || '');
+    res.json(research);
+  } catch (err) {
+    logger.error('Company research failed', { error: err });
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Research failed' });
   }
 });
 

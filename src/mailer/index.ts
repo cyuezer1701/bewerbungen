@@ -34,10 +34,14 @@ export async function sendApplicationEmail(
   const testEmail = getTestEmail();
   const actualRecipient = testMode && testEmail ? testEmail : targetEmail;
 
+  const { getSetting } = await import('../db/settings.js');
+  const senderPhone = getSetting('sender_phone') || '';
+
   const { subject, text, html } = buildApplicationEmail(
     job,
     config.SENDER_NAME,
     config.SENDER_EMAIL,
+    senderPhone,
     testMode ? targetEmail : undefined
   );
 

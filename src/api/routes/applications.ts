@@ -12,6 +12,7 @@ import { generateCoverLetter } from '../../generator/cover-letter.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { sendApplicationEmail } from '../../mailer/index.js';
 import { getActivityForJob } from '../../db/queries.js';
+import { researchCompany } from '../../matching/company-research.js';
 import { logger } from '../../utils/logger.js';
 import type { ApplicationRow } from '../../db/queries.js';
 
@@ -61,7 +62,8 @@ applicationsRouter.post('/', async (req, res) => {
       try { const d = JSON.parse(matchDetails); if (d.cover_letter_focus) focus = d.cover_letter_focus; } catch {}
     }
 
-    const coverLetter = await generateCoverLetter(job, cv, focus, feedback);
+    const companyResearch = await researchCompany(job.company, job.location || '');
+    const coverLetter = await generateCoverLetter(job, cv, focus, companyResearch, feedback);
     const appId = uuidv4();
     insertApplication({ id: appId, job_id: job.id, cover_letter_text: coverLetter });
     updateJobStatus(job.id, 'applying');
@@ -112,7 +114,8 @@ applicationsRouter.post('/:id/regenerate', async (req, res) => {
     const matchDetails = getActivityForJob(job.id, 'matched');
     if (matchDetails) { try { const d = JSON.parse(matchDetails); if (d.cover_letter_focus) focus = d.cover_letter_focus; } catch {} }
 
-    const newText = await generateCoverLetter(job, cv, focus, req.body.feedback);
+    const companyResearch = await researchCompany(job.company, job.location || '');
+    const newText = await generateCoverLetter(job, cv, focus, companyResearch, req.body.feedback);
     const newVersion = app.version + 1;
     updateApplicationCoverLetter(app.id, newText, newVersion);
 
