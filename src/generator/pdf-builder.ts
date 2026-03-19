@@ -6,10 +6,27 @@ import { PDFDocument } from 'pdf-lib';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeFilename } from '../utils/sanitize.js';
+import { getSetting } from '../db/settings.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const MONTHS_DE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+export function formatSwissDate(): string {
+  const formatter = new Intl.DateTimeFormat('de-CH', {
+    timeZone: 'Europe/Zurich',
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const day = parts.find((p) => p.type === 'day')!.value;
+  const month = parts.find((p) => p.type === 'month')!.value;
+  const year = parts.find((p) => p.type === 'year')!.value;
+  return `${day}. ${MONTHS_DE[parseInt(month, 10) - 1]} ${year}`;
+}
 
 function parseLetterParts(text: string): {
   absender: string;
@@ -99,17 +116,23 @@ export async function generateCoverLetterPDF(
   // Parse the letter text into structured parts
   const parts = parseLetterParts(text);
 
-  // If parsing didn't find structured parts, create them from CV + job data
+  // If parsing didn't find structured parts, create them from settings + job data
   if (!parts.absender) {
-    parts.absender = `${cv.name}<br>${cv.location_preference || ''}`;
+    const name = getSetting('sender_name') || cv.name;
+    const street = getSetting('sender_address_street');
+    const zip = getSetting('sender_address_zip');
+    const city = getSetting('sender_address_city');
+    const country = getSetting('sender_address_country');
+    const phone = getSetting('sender_phone');
+    const email = getSetting('sender_email');
+    const addressLines = [name, street, [zip, city].filter(Boolean).join(' '), country, phone, email].filter(Boolean);
+    parts.absender = addressLines.join('<br>');
   }
   if (!parts.empfaenger) {
     parts.empfaenger = `${job.company}<br>${job.location || ''}`;
   }
   if (!parts.datum) {
-    const now = new Date();
-    const months = ['Januar', 'Februar', 'Maerz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    parts.datum = `${now.getDate()}. ${months[now.getMonth()]} ${now.getFullYear()}`;
+    parts.datum = formatSwissDate();
   }
   if (!parts.betreff) {
     parts.betreff = `Bewerbung als ${job.title}`;

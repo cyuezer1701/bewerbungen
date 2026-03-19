@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
+import { getSetting } from '../db/settings.js';
+import { formatSwissDate } from './pdf-builder.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 
@@ -18,6 +20,8 @@ REGELN:
 - Keine Emojis, keine Aufzaehlungszeichen im Fliesstext
 - KEINE Bindestriche verwenden, sie wirken maschinell
 - Format: Absender, Datum, Empfaenger, Betreff, Anrede, 3-4 Absaetze, Gruss
+- Verwende GENAU dieses Datum: {datum}
+- Verwende GENAU diese Absenderadresse: {absender}
 
 KANDIDAT:
 {cv}
@@ -39,13 +43,27 @@ export async function generateCoverLetter(
   focus: string,
   feedback?: string
 ): Promise<string> {
+  // Build sender address from settings
+  const senderName = getSetting('sender_name') || cv.name;
+  const senderStreet = getSetting('sender_address_street');
+  const senderZip = getSetting('sender_address_zip');
+  const senderCity = getSetting('sender_address_city');
+  const senderCountry = getSetting('sender_address_country');
+  const senderPhone = getSetting('sender_phone');
+  const senderEmail = getSetting('sender_email');
+  const absenderLines = [senderName, senderStreet, [senderZip, senderCity].filter(Boolean).join(' '), senderCountry, senderPhone, senderEmail].filter(Boolean);
+  const absender = absenderLines.join('\n');
+  const datum = formatSwissDate();
+
   let prompt = COVER_LETTER_PROMPT
     .replace('{cv}', JSON.stringify(cv, null, 2))
     .replace('{title}', job.title)
     .replace('{company}', job.company)
     .replace('{location}', job.location || 'nicht angegeben')
     .replace('{description}', job.description || 'keine Beschreibung')
-    .replace('{focus}', focus);
+    .replace('{focus}', focus)
+    .replace('{datum}', datum)
+    .replace('{absender}', absender);
 
   if (feedback) {
     prompt += `\n\nZUSAETZLICHES FEEDBACK VOM BEWERBER:\n${feedback}\n\nBitte beruecksichtige dieses Feedback bei der Ueberarbeitung.`;
