@@ -22,9 +22,31 @@ REGELN:
 - Das Anschreiben MUSS auf eine einzige A4-Seite passen. Halte dich kurz.
 - Keine Emojis, keine Aufzaehlungszeichen im Fliesstext
 - KEINE Bindestriche verwenden, sie wirken maschinell
-- Format: Absender, Datum, Empfaenger, Betreff, Anrede, 3 Absaetze, Gruss
 - Verwende GENAU dieses Datum: {datum}
 - Verwende GENAU diese Absenderadresse: {absender}
+- Wiederhole NICHT den Absender im Text. Der Absender wird separat eingefuegt.
+- Der Empfaenger-Block MUSS den Firmennamen, dann PLZ und Ort enthalten. Verwende den Ort aus der Stellenanzeige.
+- NIEMALS den Jobtitel vor den Firmennamen setzen. Der Jobtitel gehoert NUR in die Betreff-Zeile.
+
+BRIEFFORMAT (strikt einhalten):
+[Absender-Block — wird separat eingefuegt, NICHT im Text wiederholen]
+
+[Firmenname]
+[Abteilung falls bekannt]
+[Strasse falls bekannt]
+[PLZ Ort]
+
+[Datum — wird separat eingefuegt, NICHT im Text wiederholen]
+
+Bewerbung als [exakter Jobtitel]
+
+Sehr geehrte Damen und Herren
+
+[3 Absaetze]
+
+Freundliche Gruesse
+
+[Name]
 
 KANDIDAT:
 {cv}

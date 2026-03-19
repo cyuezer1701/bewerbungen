@@ -18,17 +18,26 @@ export function afterGeneratePortalKeyboard(jobId: string) {
 
 export function afterGenerateEmailKeyboard(jobId: string) {
   return Markup.inlineKeyboard([
-    Markup.button.callback('Preview', `preview_${jobId}`),
-    Markup.button.callback('Per Mail senden', `send_${jobId}`),
-    Markup.button.callback('Bearbeiten', `edit_${jobId}`),
+    [
+      Markup.button.callback('PDF herunterladen', `pdf_${jobId}`),
+      Markup.button.callback('Per Mail senden', `send_${jobId}`),
+    ],
+    [
+      Markup.button.callback('Bearbeiten', `edit_${jobId}`),
+    ],
   ]);
 }
 
 export function afterGenerateBothKeyboard(jobId: string) {
   return Markup.inlineKeyboard([
-    Markup.button.callback('Per Mail senden', `send_${jobId}`),
-    Markup.button.callback('Portal + PDF', `pdf_${jobId}`),
-    Markup.button.callback('Bearbeiten', `edit_${jobId}`),
+    [
+      Markup.button.callback('PDF herunterladen', `pdf_${jobId}`),
+      Markup.button.callback('Per Mail senden', `send_${jobId}`),
+    ],
+    [
+      Markup.button.callback('Portal + PDF', `pdf_${jobId}`),
+      Markup.button.callback('Bearbeiten', `edit_${jobId}`),
+    ],
   ]);
 }
 
