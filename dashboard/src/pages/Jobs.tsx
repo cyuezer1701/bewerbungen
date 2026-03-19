@@ -17,6 +17,8 @@ interface Job {
   match_score: number | null;
   status: string;
   created_at: string;
+  already_applied_at_company?: boolean;
+  previous_applications_count?: number;
 }
 
 interface JobsResponse {
@@ -182,7 +184,14 @@ export default function Jobs() {
                   {job.match_score ?? '—'}
                 </td>
                 <td className="px-3 py-2 text-text font-medium">{job.title}</td>
-                <td className="px-3 py-2 text-text-muted">{job.company}</td>
+                <td className="px-3 py-2 text-text-muted">
+                  {job.company}
+                  {job.already_applied_at_company && (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded bg-warning/20 text-warning" title={`${job.previous_applications_count} vorherige Bewerbung(en)`}>
+                      Bereits beworben
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {job.salary_estimate_realistic ? (
                     <span className="text-accent">~{job.salary_currency} {formatNum(job.salary_estimate_realistic)}</span>
@@ -247,7 +256,9 @@ export default function Jobs() {
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-text truncate">{job.title}</p>
-                <p className="text-xs text-text-muted truncate">{job.company} · {job.location || 'k.A.'}</p>
+                <p className="text-xs text-text-muted truncate">
+                  {job.company}{job.already_applied_at_company && <span className="ml-1 text-warning">(bereits beworben)</span>} · {job.location || 'k.A.'}
+                </p>
               </div>
               <span className={`font-mono text-lg font-bold shrink-0 ${scoreColor(job.match_score)}`}>
                 {job.match_score ?? '—'}

@@ -16,6 +16,7 @@ interface SearchStrategy {
   keywords: string[];
   source: string;
   exclude: string[];
+  excludeFromSettings?: string[];
 }
 
 function tagColor(type: 'keyword' | 'source' | 'exclude'): string {
@@ -206,6 +207,13 @@ export default function Profile() {
                   <button onClick={addExclude} disabled={!newExclude.trim() || savingStrategy}
                     className="text-danger hover:text-danger/80 disabled:opacity-50"><Plus size={16} /></button>
                 </div>
+                {strategy.excludeFromSettings && strategy.excludeFromSettings.length > 0 && (
+                  <div className="mt-2 text-xs text-text-muted bg-navy border border-border rounded px-3 py-2">
+                    <span className="font-medium">Zusaetzlich aus Settings:</span>{' '}
+                    {strategy.excludeFromSettings.join(', ')}
+                    <span className="block mt-1 opacity-70">Aenderbar unter Einstellungen → Job Suche</span>
+                  </div>
+                )}
               </div>
             </>
           ) : (

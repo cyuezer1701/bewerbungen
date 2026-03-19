@@ -14,6 +14,8 @@ interface Stats {
   applications_total: number;
   weekly_stats: { applied: number; interview: number; rejected: number; offer: number };
 }
+interface OutcomeEntry { score_range: string; status: string; count: number; }
+interface OutcomeData { outcomes: OutcomeEntry[]; total: number; }
 
 const COLORS = ['#00ff87', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4'];
 const FUNNEL_COLORS: Record<string, string> = {
@@ -30,12 +32,14 @@ export default function Analytics() {
   const [funnel, setFunnel] = useState<FunnelStage[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [salary, setSalary] = useState<SalaryAnalysis | null>(null);
+  const [outcomes, setOutcomes] = useState<OutcomeData | null>(null);
 
   useEffect(() => {
     apiGet<Stats>('/stats').then(setStats).catch(() => {});
     apiGet<FunnelStage[]>('/stats/funnel').then(setFunnel).catch(() => {});
     apiGet<TimelineEntry[]>('/stats/timeline').then(setTimeline).catch(() => {});
     apiGet<SalaryAnalysis>('/stats/salary-analysis').then(setSalary).catch(() => {});
+    apiGet<OutcomeData>('/stats/outcomes').then(setOutcomes).catch(() => {});
   }, []);
 
   // Aggregate timeline by week
@@ -98,6 +102,49 @@ export default function Analytics() {
               <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Outcome Success Rate (Phase 15) */}
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h2 className="text-sm font-semibold text-text mb-4">Erfolgsquote nach Score</h2>
+          {outcomes && outcomes.total >= 5 ? (() => {
+            const ranges = ['90+', '80-89', '70-79', '<70'];
+            const statusLabels: Record<string, string> = { interview: 'Interview', offer: 'Angebot', rejected: 'Absage', applied: 'Ausstehend' };
+            const statusColors: Record<string, string> = { interview: 'text-accent', offer: 'text-green-400', rejected: 'text-danger', applied: 'text-blue-400' };
+            const grouped = new Map<string, Record<string, number>>();
+            for (const r of ranges) grouped.set(r, {});
+            for (const o of outcomes.outcomes) {
+              if (grouped.has(o.score_range)) {
+                grouped.get(o.score_range)![o.status] = o.count;
+              }
+            }
+            return (
+              <div className="space-y-2">
+                <div className="grid grid-cols-5 gap-2 text-xs text-text-muted font-medium border-b border-border pb-1">
+                  <span>Score</span>
+                  {Object.keys(statusLabels).map(s => <span key={s}>{statusLabels[s]}</span>)}
+                </div>
+                {ranges.map(range => {
+                  const data = grouped.get(range)!;
+                  const total = Object.values(data).reduce((a, b) => a + b, 0);
+                  if (total === 0) return null;
+                  return (
+                    <div key={range} className="grid grid-cols-5 gap-2 text-sm">
+                      <span className="font-mono font-bold text-text">{range}</span>
+                      {Object.keys(statusLabels).map(s => (
+                        <span key={s} className={`font-mono ${statusColors[s] || 'text-text-muted'}`}>
+                          {data[s] || 0}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-text-muted mt-2">Basierend auf {outcomes.total} Bewerbungen</p>
+              </div>
+            );
+          })() : (
+            <p className="text-text-muted text-sm">Mindestens 5 abgeschlossene Bewerbungen noetig</p>
+          )}
         </div>
 
         {/* Salary Overview */}

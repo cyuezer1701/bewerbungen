@@ -134,6 +134,7 @@ export default function SettingsPage() {
     0: ( // Job Suche
       <div className="space-y-4">
         {f('Such Keywords (kommagetrennt)', 'search_keywords', 'text', 'IT Manager, DevOps')}
+        {f('Ausschluss Keywords (kommagetrennt)', 'exclude_keywords', 'text', 'Junior, Trainee, Pharma, Praktikum')}
         {f('Standort', 'search_location')}
         {n('Radius (km)', 'search_radius_km', 10, 200)}
         {n('Min Match Score (%)', 'min_match_score')}

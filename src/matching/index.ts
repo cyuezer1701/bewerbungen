@@ -7,6 +7,10 @@ import {
   logActivity,
   getActiveWishes,
   getCandidateProfile,
+  getOutcomeSummary,
+  getOutcomeTotal,
+  getRecentApplicationsByCompany,
+  normalizeCompany,
 } from '../db/queries.js';
 import { getStructuredCV } from './cv-parser.js';
 import { scoreJob } from './job-scorer.js';
@@ -43,8 +47,12 @@ export async function runMatching(): Promise<number> {
   const profile = useRecruiter ? loadCandidateProfile() : null;
   const wishes = useRecruiter ? getActiveWishes() : [];
 
+  // Load outcome summary for learning loop (only if enough data)
+  const outcomeTotal = useRecruiter ? getOutcomeTotal() : 0;
+  const outcomeSummary = outcomeTotal >= 5 ? getOutcomeSummary() : undefined;
+
   if (useRecruiter) {
-    logger.info(`AI Recruiter active (profile: ${profile ? 'yes' : 'no'}, wishes: ${wishes.length})`);
+    logger.info(`AI Recruiter active (profile: ${profile ? 'yes' : 'no'}, wishes: ${wishes.length}, outcomes: ${outcomeTotal})`);
   }
 
   let scored = 0;
@@ -53,7 +61,11 @@ export async function runMatching(): Promise<number> {
       let result: JobMatchResult | RecruiterAssessment;
 
       if (useRecruiter) {
-        result = await assessJobAsRecruiter(job, cv, profile, wishes);
+        // Check for duplicate company applications
+        const companyNorm = (job as { company_normalized?: string }).company_normalized || normalizeCompany(job.company);
+        const companyApps = getRecentApplicationsByCompany(companyNorm);
+
+        result = await assessJobAsRecruiter(job, cv, profile, wishes, outcomeSummary, companyApps.length > 0 ? companyApps : undefined);
       } else {
         result = await scoreJob(job, cv);
       }

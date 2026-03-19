@@ -5,6 +5,7 @@ import { withRetry } from '../utils/retry.js';
 import { getSetting } from '../db/settings.js';
 import { formatSwissDate } from './pdf-builder.js';
 import { validateCoverLetter, calculateHumanScore, humanizeText } from './humanizer.js';
+import { verifyFacts } from './fact-checker.js';
 import type { JobRow } from '../db/queries.js';
 import type { StructuredCV } from '../matching/cv-parser.js';
 import type { CompanyResearch } from '../matching/company-research.js';
@@ -48,6 +49,8 @@ export interface CoverLetterData {
   datum: string;
   ortsdatum: string;
   senderName: string;
+  factCheckPassed?: boolean;
+  factCheckViolations?: string[];
 }
 
 // --- Bestehende Helper ---
@@ -324,6 +327,56 @@ export async function generateCoverLetter(
     throw new Error('Cover letter generation failed: no content after retries');
   }
 
+  // Phase 15: Fact Check
+  let factCheckPassed = false;
+  let factCheckViolations: string[] = [];
+  try {
+    const factResult = await verifyFacts(content, cv);
+    factCheckPassed = factResult.verified;
+    factCheckViolations = factResult.violations;
+
+    if (!factResult.verified && factResult.violations.length > 0) {
+      logger.warn(`Fact check failed: ${factResult.violations.join('; ')}`);
+      // One retry with correction feedback
+      const correctionFeedback = `FAKTENCHECK FEHLGESCHLAGEN. Folgende Behauptungen sind NICHT im CV verifizierbar und muessen entfernt oder korrigiert werden:\n${factResult.violations.map(v => `- ${v}`).join('\n')}\n\nGeneriere die 4 Absaetze NEU als JSON. Entferne oder korrigiere ALLE oben genannten Verstoesse.`;
+      prompt += `\n\n${correctionFeedback}`;
+
+      const retryText = await withRetry(async () => {
+        const response = await client.messages.create({
+          model: config.CLAUDE_MODEL,
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const textBlock = response.content.find((b) => b.type === 'text');
+        if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
+        return textBlock.text;
+      });
+
+      const retryCleaned = retryText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      try {
+        const retryParsed = JSON.parse(retryCleaned);
+        content = {
+          betreff: content.betreff,
+          anrede: content.anrede,
+          absatz_1: retryParsed.absatz_1 || content.absatz_1,
+          absatz_2: retryParsed.absatz_2 || content.absatz_2,
+          absatz_3: retryParsed.absatz_3 || content.absatz_3,
+          absatz_4: retryParsed.absatz_4 || content.absatz_4,
+        };
+
+        // Re-check facts
+        const recheck = await verifyFacts(content, cv);
+        factCheckPassed = recheck.verified;
+        factCheckViolations = recheck.violations;
+        logger.info(`Fact check retry: ${recheck.verified ? 'PASSED' : `still ${recheck.violations.length} violations`}`);
+      } catch {
+        logger.warn('Failed to parse fact-check retry response');
+      }
+    }
+  } catch (err) {
+    logger.warn('Fact check failed (non-critical)', { error: err });
+  }
+
   // Phase 14: Human Score + Auto-Humanize
   const minHumanScore = parseInt(getSetting('human_score_minimum') || '70', 10);
   const autoRetry = getSetting('human_score_auto_retry') !== 'false';
@@ -356,6 +409,8 @@ export async function generateCoverLetter(
     datum,
     ortsdatum,
     senderName,
+    factCheckPassed,
+    factCheckViolations,
   };
 
   logger.info(`Cover letter generated for "${job.title}" at ${job.company} (${bodyText.split(/\s+/).length} words, human score: ${humanScore})`);

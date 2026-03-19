@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../../db/index.js';
-import { getJobCountByStatus, getRecentJobCount, getTotalApplicationCount, getWeeklyStats, getAverageSalary } from '../../db/queries.js';
+import { getJobCountByStatus, getRecentJobCount, getTotalApplicationCount, getWeeklyStats, getAverageSalary, getOutcomeSummary, getOutcomeTotal } from '../../db/queries.js';
 
 export const statsRouter = Router();
 
@@ -62,6 +62,14 @@ statsRouter.get('/funnel', (_req, res) => {
   }));
 
   res.json(result);
+});
+
+// GET /api/stats/outcomes — Success rates by score range (Phase 15)
+// curl -H "Authorization: Bearer TOKEN" http://localhost:3333/api/stats/outcomes
+statsRouter.get('/outcomes', (_req, res) => {
+  const outcomes = getOutcomeSummary();
+  const total = getOutcomeTotal();
+  res.json({ outcomes, total });
 });
 
 // GET /api/stats/timeline — Weekly activity

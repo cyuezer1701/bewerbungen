@@ -5,11 +5,12 @@ import { getDb } from '../../db/index.js';
 import {
   getJobById, getApplicationByJobId, insertApplication, updateApplicationStatus,
   updateApplicationCoverLetter, updateApplicationPdfPaths, updateApplicationSentInfo,
-  updateJobStatus, logActivity,
+  updateJobStatus, logActivity, updateApplicationFactCheck,
 } from '../../db/queries.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
 import { generateCoverLetter, formatCoverLetterForStorage } from '../../generator/cover-letter.js';
 import { calculateHumanScore, humanizeText } from '../../generator/humanizer.js';
+import { verifyFacts } from '../../generator/fact-checker.js';
 import { generateApplicationPackage } from '../../generator/pdf-builder.js';
 import { sendApplicationEmail } from '../../mailer/index.js';
 import { getActivityForJob, updateApplicationHumanScore, updateApplicationCoverLetter as updateAppCoverLetter2 } from '../../db/queries.js';
@@ -68,6 +69,11 @@ applicationsRouter.post('/', async (req, res) => {
     const appId = uuidv4();
     insertApplication({ id: appId, job_id: job.id, cover_letter_text: formatCoverLetterForStorage(coverLetterData) });
     updateJobStatus(job.id, 'applying');
+
+    // Save fact check results
+    if (coverLetterData.factCheckPassed !== undefined) {
+      updateApplicationFactCheck(appId, coverLetterData.factCheckPassed, coverLetterData.factCheckViolations || []);
+    }
 
     // Generate PDFs
     try {
@@ -217,7 +223,56 @@ applicationsRouter.get('/:id/human-score', (req, res) => {
   if (!app.cover_letter_text) return res.status(400).json({ error: 'No cover letter text' });
 
   const { score, details, flaggedPatterns } = calculateHumanScore(app.cover_letter_text);
-  res.json({ score, details, flaggedPatterns, stored_score: (app as ApplicationRow & { human_score?: number }).human_score });
+  const extended = app as ApplicationRow & { human_score?: number; fact_check_passed?: number; fact_check_violations?: string };
+  let factCheckViolations: string[] = [];
+  if (extended.fact_check_violations) {
+    try { factCheckViolations = JSON.parse(extended.fact_check_violations); } catch {}
+  }
+  res.json({
+    score, details, flaggedPatterns,
+    stored_score: extended.human_score,
+    factCheckPassed: extended.fact_check_passed === 1,
+    factCheckViolations,
+  });
+});
+
+// POST /api/applications/:id/fact-check — Manual fact check (Phase 15)
+applicationsRouter.post('/:id/fact-check', async (req, res) => {
+  const db = getDb();
+  const app = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id) as ApplicationRow | undefined;
+  if (!app) return res.status(404).json({ error: 'Application not found' });
+  if (!app.cover_letter_text) return res.status(400).json({ error: 'No cover letter text' });
+
+  try {
+    const cv = await getStructuredCV();
+
+    // Parse cover letter text back to content
+    const lines = app.cover_letter_text.split('\n').filter((l: string) => l.trim().length > 0);
+    const bodyLines: string[] = [];
+    let started = false;
+    for (const line of lines) {
+      if (line.startsWith('Sehr geehrte') || line.startsWith('Sehr geehrter')) { started = true; continue; }
+      if (line === 'Freundliche Grüsse' || line === 'Freundliche Gruesse') break;
+      if (started) bodyLines.push(line);
+    }
+
+    const content = {
+      betreff: '',
+      anrede: '',
+      absatz_1: bodyLines[0] || '',
+      absatz_2: bodyLines[1] || '',
+      absatz_3: bodyLines[2] || '',
+      absatz_4: bodyLines[3] || '',
+    };
+
+    const result = await verifyFacts(content, cv);
+    updateApplicationFactCheck(app.id, result.verified, result.violations);
+
+    res.json(result);
+  } catch (err) {
+    logger.error('Manual fact check failed', { error: err });
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Fact check failed' });
+  }
 });
 
 // GET /api/applications/:id/pdf — Download PDF

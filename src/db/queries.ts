@@ -94,17 +94,18 @@ export function insertJob(job: {
   contact_department?: string;
   reference_number?: string;
   salary_requested_in_posting?: boolean;
+  company_normalized?: string;
 }): void {
   const db = getDb();
   db.prepare(`
     INSERT INTO jobs (id, source, source_id, source_url, title, company, location, description,
                       salary_range, application_method, application_url, application_email, posted_at,
                       contact_person, contact_gender, contact_title, contact_department,
-                      reference_number, salary_requested_in_posting)
+                      reference_number, salary_requested_in_posting, company_normalized)
     VALUES (@id, @source, @source_id, @source_url, @title, @company, @location, @description,
             @salary_range, @application_method, @application_url, @application_email, @posted_at,
             @contact_person, @contact_gender, @contact_title, @contact_department,
-            @reference_number, @salary_requested_in_posting)
+            @reference_number, @salary_requested_in_posting, @company_normalized)
   `).run({
     id: job.id,
     source: job.source,
@@ -125,6 +126,7 @@ export function insertJob(job: {
     contact_department: job.contact_department ?? null,
     reference_number: job.reference_number ?? null,
     salary_requested_in_posting: job.salary_requested_in_posting ? 1 : 0,
+    company_normalized: job.company_normalized ?? null,
   });
 }
 
@@ -518,4 +520,83 @@ export function upsertCandidateProfile(profile: Partial<CandidateProfileRow>): v
 export function updateApplicationHumanScore(id: string, score: number): void {
   const db = getDb();
   db.prepare("UPDATE applications SET human_score = ?, updated_at = datetime('now') WHERE id = ?").run(score, id);
+}
+
+// --- Phase 15: Company Normalization ---
+
+export function normalizeCompany(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\b(ag|gmbh|sa|sarl|s\.a\.|co\.|kg|ohg|inc|ltd|llc|corp|se|eg|e\.v\.|mbh|& co)\b\.?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// --- Phase 15: Duplicate Company Guard ---
+
+export function getRecentApplicationsByCompany(
+  companyNormalized: string,
+  daysBack = 90
+): Array<{ job_id: string; status: string; title: string; applied_at: string }> {
+  const db = getDb();
+  return db.prepare(`
+    SELECT j.id as job_id, j.status, j.title, j.updated_at as applied_at
+    FROM jobs j
+    WHERE j.company_normalized = ?
+      AND j.status IN ('applied', 'interview', 'offer', 'applying')
+      AND j.updated_at >= datetime('now', ?)
+    ORDER BY j.updated_at DESC
+  `).all(companyNormalized, `-${daysBack} days`) as Array<{ job_id: string; status: string; title: string; applied_at: string }>;
+}
+
+// --- Phase 15: Outcome-Based Learning ---
+
+export interface OutcomeSummary {
+  score_range: string;
+  status: string;
+  count: number;
+}
+
+export function getOutcomeSummary(): OutcomeSummary[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      CASE
+        WHEN j.match_score >= 90 THEN '90+'
+        WHEN j.match_score >= 80 THEN '80-89'
+        WHEN j.match_score >= 70 THEN '70-79'
+        ELSE '<70'
+      END as score_range,
+      j.status,
+      COUNT(*) as count
+    FROM jobs j
+    WHERE j.status IN ('applied', 'interview', 'rejected', 'offer')
+      AND j.match_score IS NOT NULL
+    GROUP BY score_range, j.status
+    ORDER BY score_range DESC, j.status
+  `).all() as OutcomeSummary[];
+}
+
+export function getOutcomeTotal(): number {
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT COUNT(*) as count FROM jobs WHERE status IN ('applied', 'interview', 'rejected', 'offer')"
+  ).get() as { count: number };
+  return row.count;
+}
+
+// --- Phase 15: Fact Check ---
+
+export function updateApplicationFactCheck(
+  id: string,
+  passed: boolean,
+  violations: string[]
+): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE applications
+    SET fact_check_passed = ?, fact_check_violations = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(passed ? 1 : 0, violations.length > 0 ? JSON.stringify(violations) : null, id);
 }

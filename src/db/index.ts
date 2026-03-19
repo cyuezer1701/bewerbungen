@@ -97,6 +97,23 @@ function runMigrations(db: Database.Database): void {
     db.exec('ALTER TABLE applications ADD COLUMN human_score INTEGER');
     logger.info('Migration: added applications.human_score');
   }
+
+  // Phase 15: company_normalized column for duplicate detection
+  if (!jobCols.includes('company_normalized')) {
+    db.exec('ALTER TABLE jobs ADD COLUMN company_normalized TEXT');
+    db.exec("UPDATE jobs SET company_normalized = LOWER(TRIM(company))");
+    logger.info('Migration: added jobs.company_normalized');
+  }
+
+  // Phase 15: fact_check columns on applications
+  if (!appCols.includes('fact_check_passed')) {
+    db.exec('ALTER TABLE applications ADD COLUMN fact_check_passed INTEGER DEFAULT 0');
+    logger.info('Migration: added applications.fact_check_passed');
+  }
+  if (!appCols.includes('fact_check_violations')) {
+    db.exec('ALTER TABLE applications ADD COLUMN fact_check_violations TEXT');
+    logger.info('Migration: added applications.fact_check_violations');
+  }
 }
 
 export function closeDatabase(): void {

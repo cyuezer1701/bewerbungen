@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../../db/index.js';
-import { getJobById, updateJobStatus, logActivity } from '../../db/queries.js';
+import { getJobById, updateJobStatus, logActivity, normalizeCompany, getRecentApplicationsByCompany } from '../../db/queries.js';
 import { runScrapers } from '../../scrapers/index.js';
 import { runMatching } from '../../matching/index.js';
 import { scoreJob } from '../../matching/job-scorer.js';
@@ -48,7 +48,20 @@ jobsRouter.get('/', (req, res) => {
   const rows = db.prepare(`SELECT * FROM jobs ${where} ORDER BY ${sortCol} ${sortOrder} LIMIT ? OFFSET ?`)
     .all(...params, Number(limit), offset) as JobRow[];
 
-  res.json({ data: rows, total: countRow.total, page: Number(page), limit: Number(limit) });
+  // Enrich with duplicate company info
+  const enriched = rows.map(job => {
+    const companyNorm = (job as JobRow & { company_normalized?: string }).company_normalized || normalizeCompany(job.company);
+    const prevApps = getRecentApplicationsByCompany(companyNorm);
+    // Exclude the current job from the list
+    const otherApps = prevApps.filter(a => a.job_id !== job.id);
+    return {
+      ...job,
+      already_applied_at_company: otherApps.length > 0,
+      previous_applications_count: otherApps.length,
+    };
+  });
+
+  res.json({ data: enriched, total: countRow.total, page: Number(page), limit: Number(limit) });
 });
 
 // GET /api/jobs/:id — Detail

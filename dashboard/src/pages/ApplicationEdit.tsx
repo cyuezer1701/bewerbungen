@@ -22,6 +22,8 @@ interface HumanScore {
   score: number;
   details: string;
   flaggedPatterns: string[];
+  factCheckPassed?: boolean;
+  factCheckViolations?: string[];
 }
 
 function formatNum(n: number): string {
@@ -41,6 +43,7 @@ export default function ApplicationEdit() {
   const [sending, setSending] = useState(false);
   const [humanScore, setHumanScore] = useState<HumanScore | null>(null);
   const [humanizing, setHumanizing] = useState(false);
+  const [factChecking, setFactChecking] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -103,6 +106,14 @@ export default function ApplicationEdit() {
     } finally { setHumanizing(false); }
   }
 
+  async function handleFactCheck() {
+    setFactChecking(true);
+    try {
+      const result = await apiPost<{ verified: boolean; violations: string[] }>(`/applications/${id}/fact-check`);
+      setHumanScore(prev => prev ? { ...prev, factCheckPassed: result.verified, factCheckViolations: result.violations } : prev);
+    } finally { setFactChecking(false); }
+  }
+
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const scoreColor = humanScore ? (humanScore.score >= 70 ? 'text-accent' : humanScore.score >= 50 ? 'text-warning' : 'text-danger') : '';
   const scoreBg = humanScore ? (humanScore.score >= 70 ? 'bg-accent/20' : humanScore.score >= 50 ? 'bg-warning/20' : 'bg-danger/20') : '';
@@ -126,6 +137,13 @@ export default function ApplicationEdit() {
                 {humanScore && (
                   <span className={`flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${scoreBg} ${scoreColor}`}>
                     <Shield size={12} /> {humanScore.score}
+                  </span>
+                )}
+                {humanScore?.factCheckPassed !== undefined && (
+                  <span className={`flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                    humanScore.factCheckPassed ? 'bg-accent/20 text-accent' : 'bg-danger/20 text-danger'
+                  }`}>
+                    {humanScore.factCheckPassed ? 'Fakten OK' : 'Fakten!'}
                   </span>
                 )}
                 <span className={`text-xs font-mono ${wordCount >= 250 && wordCount <= 350 ? 'text-accent' : 'text-warning'}`}>
@@ -176,6 +194,10 @@ export default function ApplicationEdit() {
               className="flex items-center gap-1 bg-card border border-warning text-warning px-4 py-2 rounded text-sm hover:bg-warning/10 disabled:opacity-50">
               <Sparkles size={14} className={humanizing ? 'animate-spin' : ''} /> {humanizing ? 'Humanisiere...' : 'Humanisieren'}
             </button>
+            <button onClick={handleFactCheck} disabled={factChecking}
+              className="flex items-center gap-1 bg-card border border-blue-400 text-blue-400 px-4 py-2 rounded text-sm hover:bg-blue-400/10 disabled:opacity-50">
+              <Shield size={14} className={factChecking ? 'animate-spin' : ''} /> {factChecking ? 'Pruefe...' : 'Faktencheck'}
+            </button>
             {app.full_package_pdf_path && (
               <a href={`/api/applications/${app.id}/pdf?type=komplett`}
                 className="flex items-center gap-1 bg-card border border-border text-text px-4 py-2 rounded text-sm hover:bg-navy">
@@ -194,6 +216,21 @@ export default function ApplicationEdit() {
               <ul className="space-y-1">
                 {humanScore.flaggedPatterns.map((p, i) => (
                   <li key={i} className="text-xs text-text-muted">• {p}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* Fact Check Violations */}
+          {humanScore?.factCheckViolations?.length ? (
+            <div className="bg-danger/10 border border-danger/30 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={14} className="text-danger" />
+                <span className="text-xs font-semibold text-danger">Faktencheck-Verstoesse</span>
+              </div>
+              <ul className="space-y-1">
+                {humanScore.factCheckViolations.map((v, i) => (
+                  <li key={i} className="text-xs text-text-muted">• {v}</li>
                 ))}
               </ul>
             </div>

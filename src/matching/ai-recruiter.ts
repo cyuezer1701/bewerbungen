@@ -5,7 +5,7 @@ import { withRetry } from '../utils/retry.js';
 import { getSetting } from '../db/settings.js';
 import { scoringSemaphore } from './job-scorer.js';
 import type { SalaryEstimate } from './job-scorer.js';
-import type { JobRow } from '../db/queries.js';
+import type { JobRow, OutcomeSummary } from '../db/queries.js';
 import type { StructuredCV } from './cv-parser.js';
 import type { CandidateProfile } from './candidate-profile.js';
 import type { CandidateWishRow } from '../db/queries.js';
@@ -51,11 +51,47 @@ function getAggressivenessInstruction(): string {
   }
 }
 
+function formatOutcomeSummary(outcomes: OutcomeSummary[]): string {
+  if (outcomes.length === 0) return '';
+
+  const ranges = new Map<string, Record<string, number>>();
+  for (const o of outcomes) {
+    if (!ranges.has(o.score_range)) ranges.set(o.score_range, {});
+    ranges.get(o.score_range)![o.status] = o.count;
+  }
+
+  const lines: string[] = [];
+  for (const [range, statuses] of ranges) {
+    const parts: string[] = [];
+    if (statuses.interview) parts.push(`${statuses.interview} Interview${statuses.interview > 1 ? 's' : ''}`);
+    if (statuses.offer) parts.push(`${statuses.offer} Angebot${statuses.offer > 1 ? 'e' : ''}`);
+    if (statuses.rejected) parts.push(`${statuses.rejected} Absage${statuses.rejected > 1 ? 'n' : ''}`);
+    if (statuses.applied) parts.push(`${statuses.applied} ausstehend`);
+    if (parts.length > 0) lines.push(`Score ${range}: ${parts.join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+function formatDuplicateCompanyHint(
+  companyApps: Array<{ status: string; title: string; applied_at: string }>
+): string {
+  if (companyApps.length === 0) return '';
+
+  const hints = companyApps.map(a =>
+    `  - "${a.title}" (Status: ${a.status}, am ${a.applied_at.split('T')[0]})`
+  );
+
+  return `\nHINWEIS: Der Kandidat hat sich bereits bei dieser Firma beworben:\n${hints.join('\n')}\nBewerte ob dieser neue Job trotzdem relevant ist oder zu aehnlich.\n`;
+}
+
 function buildRecruiterPrompt(
   job: JobRow,
   cv: StructuredCV,
   profile: CandidateProfile | null,
-  wishes: CandidateWishRow[]
+  wishes: CandidateWishRow[],
+  outcomeSummary?: OutcomeSummary[],
+  companyApplications?: Array<{ status: string; title: string; applied_at: string }>
 ): string {
   const aggressiveness = getAggressivenessInstruction();
 
@@ -69,6 +105,14 @@ Ideale Firmen: ${profile.ideal_companies}
 Gehaltseinschaetzung: ${profile.salary_insight}`
     : 'Kein tiefes Profil vorhanden — nutze den Lebenslauf direkt.';
 
+  const outcomeSection = outcomeSummary && outcomeSummary.length > 0
+    ? `\nBISHERIGE BEWERBUNGSERFAHRUNGEN:\n${formatOutcomeSummary(outcomeSummary)}\nNutze diese Daten um deine Empfehlung zu kalibrieren. Wenn Score-Bereiche systematisch zu Absagen fuehren, sei dort kritischer.\n`
+    : '';
+
+  const duplicateSection = companyApplications && companyApplications.length > 0
+    ? formatDuplicateCompanyHint(companyApplications)
+    : '';
+
   return `Du bist der persoenliche Executive Recruiter dieses Kandidaten. Du kennst ihn seit Jahren und weisst genau was er will und kann.
 
 ${aggressiveness}
@@ -80,7 +124,7 @@ ${profileSection}
 
 WUENSCHE DES KANDIDATEN:
 ${formatWishesForPrompt(wishes)}
-
+${outcomeSection}${duplicateSection}
 JOB:
 Titel: ${job.title}
 Firma: ${job.company}
@@ -122,13 +166,15 @@ export async function assessJobAsRecruiter(
   job: JobRow,
   cv: StructuredCV,
   profile: CandidateProfile | null,
-  wishes: CandidateWishRow[]
+  wishes: CandidateWishRow[],
+  outcomeSummary?: OutcomeSummary[],
+  companyApplications?: Array<{ status: string; title: string; applied_at: string }>
 ): Promise<RecruiterAssessment> {
   await scoringSemaphore.acquire();
 
   try {
     const client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-    const prompt = buildRecruiterPrompt(job, cv, profile, wishes);
+    const prompt = buildRecruiterPrompt(job, cv, profile, wishes, outcomeSummary, companyApplications);
 
     const result = await withRetry(async () => {
       const response = await client.messages.create({

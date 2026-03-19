@@ -86,6 +86,7 @@ const DEFAULTS: Record<string, { value: string; encrypted: boolean }> = {
   ai_recruiter_aggressiveness: { value: 'balanced', encrypted: false },
   human_score_minimum: { value: '70', encrypted: false },
   human_score_auto_retry: { value: 'true', encrypted: false },
+  exclude_keywords: { value: '', encrypted: false },
 };
 
 export function initDefaultSettings(): void {

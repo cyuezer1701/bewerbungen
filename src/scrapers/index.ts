@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { alertScraperError } from '../utils/alerter.js';
 import { getSetting } from '../db/settings.js';
-import { insertJob, logActivity } from '../db/queries.js';
+import { insertJob, logActivity, normalizeCompany } from '../db/queries.js';
 import { type ScrapedJob, launchStealthBrowser } from './base-scraper.js';
 import { IndeedScraper } from './indeed-scraper.js';
 import { LinkedInScraper } from './linkedin-scraper.js';
@@ -138,11 +138,37 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
   // Cross-source deduplication
   const uniqueJobs = deduplicateJobs(allJobs);
 
+  // Exclude-Keywords filtering
+  const { getExcludeKeywords } = await import('../matching/search-strategy.js');
+  const excludeFromProfile = getExcludeKeywords();
+  const excludeFromSettings = (getSetting('exclude_keywords') || '').split(',').map(k => k.trim()).filter(Boolean);
+  const allExcludeKeywords = [...new Set([...excludeFromProfile, ...excludeFromSettings])].map(k => k.toLowerCase());
+
+  let filteredJobs = uniqueJobs;
+  let excludedCount = 0;
+  if (allExcludeKeywords.length > 0) {
+    filteredJobs = uniqueJobs.filter(job => {
+      const titleLower = job.title.toLowerCase();
+      const descLower = (job.description || '').toLowerCase();
+      const match = allExcludeKeywords.find(kw => titleLower.includes(kw) || descLower.includes(kw));
+      if (match) {
+        logger.debug(`Exclude-Keyword "${match}" matched: "${job.title}" at ${job.company}`);
+        excludedCount++;
+        return false;
+      }
+      return true;
+    });
+    if (excludedCount > 0) {
+      logger.info(`Exclude-Keywords filter: removed ${excludedCount} jobs (keywords: ${allExcludeKeywords.join(', ')})`);
+    }
+  }
+
   // Save to database
   let savedCount = 0;
-  for (const job of uniqueJobs) {
+  for (const job of filteredJobs) {
     try {
       const id = uuidv4();
+      const companyNormalized = normalizeCompany(job.company);
       insertJob({
         id,
         source: job.source,
@@ -163,6 +189,7 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
         contact_department: job.contactDepartment,
         reference_number: job.referenceNumber,
         salary_requested_in_posting: job.salaryRequestedInPosting,
+        company_normalized: companyNormalized,
       });
       logActivity(id, null, 'scraped', JSON.stringify({
         source: job.source,
@@ -175,7 +202,7 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
     }
   }
 
-  logger.info(`Scraper run complete: ${allJobs.length} found, ${uniqueJobs.length} unique, ${savedCount} saved to DB`);
+  logger.info(`Scraper run complete: ${allJobs.length} found, ${uniqueJobs.length} unique, ${excludedCount} excluded by keywords, ${savedCount} saved to DB`);
 
-  return uniqueJobs;
+  return filteredJobs;
 }

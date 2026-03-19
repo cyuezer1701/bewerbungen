@@ -3,6 +3,7 @@ import { getCandidateProfile, upsertCandidateProfile, getActiveWishes } from '..
 import { getStructuredCV } from '../../matching/cv-parser.js';
 import { generateCandidateProfile } from '../../matching/candidate-profile.js';
 import { getSearchKeywords, getExcludeKeywords } from '../../matching/search-strategy.js';
+import { getSetting } from '../../db/settings.js';
 import { logger } from '../../utils/logger.js';
 
 export const profileRouter = Router();
@@ -50,14 +51,37 @@ profileRouter.put('/wishes', (req, res) => {
 // GET /api/profile/search-strategy — Get keywords + source
 profileRouter.get('/search-strategy', (_req, res) => {
   const { keywords, source } = getSearchKeywords();
-  const exclude = getExcludeKeywords();
-  res.json({ keywords, source, exclude });
+  const excludeProfile = getExcludeKeywords();
+  const excludeSettings = (getSetting('exclude_keywords') || '').split(',').map(k => k.trim()).filter(Boolean);
+  // Show profile exclude keywords (editable here) separately from settings-only ones
+  res.json({ keywords, source, exclude: excludeProfile, excludeFromSettings: excludeSettings });
 });
 
 // PATCH /api/profile/search-strategy — Manually override keywords
 profileRouter.patch('/search-strategy', (req, res) => {
-  const { search_strategy } = req.body;
-  if (!search_strategy) return res.status(400).json({ error: 'search_strategy required' });
-  upsertCandidateProfile({ search_strategy_keywords: JSON.stringify(search_strategy) });
+  // Accept both formats: { search_strategy: {...} } or direct { keywords, exclude, ... }
+  const strategy = req.body.search_strategy || req.body;
+  if (!strategy || (!strategy.keywords && !strategy.exclude)) {
+    return res.status(400).json({ error: 'keywords or exclude required' });
+  }
+
+  // Load existing strategy and merge
+  const profile = getCandidateProfile();
+  let existing: Record<string, unknown> = {};
+  if (profile?.search_strategy_keywords) {
+    try { existing = JSON.parse(profile.search_strategy_keywords); } catch {}
+  }
+
+  // Build updated strategy: keep primary/secondary/opportunistic from AI, allow manual override of exclude + keywords
+  const updated = {
+    ...existing,
+    ...(strategy.keywords !== undefined ? {
+      primary: strategy.keywords.filter((_: string, i: number) => i < Math.ceil(strategy.keywords.length / 2)),
+      secondary: strategy.keywords.filter((_: string, i: number) => i >= Math.ceil(strategy.keywords.length / 2)),
+    } : {}),
+    ...(strategy.exclude !== undefined ? { exclude: strategy.exclude } : {}),
+  };
+
+  upsertCandidateProfile({ search_strategy_keywords: JSON.stringify(updated) });
   res.json({ ok: true });
 });
