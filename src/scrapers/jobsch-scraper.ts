@@ -3,6 +3,44 @@ import { BaseScraper, type ScrapedJob, getRandomUserAgent } from './base-scraper
 import { logger } from '../utils/logger.js';
 import { getJobBySourceId } from '../db/queries.js';
 
+// --- Cleanup helpers for scraped text ---
+
+function cleanCompanyName(raw: string): string {
+  if (!raw) return '';
+  let s = raw;
+  // Cut at known UI markers
+  s = s.split(/SaveApply|Save$|Apply$|See company profile|About the company|Industry |> ?\d|See my match|\d+ jobs/i)[0];
+  // Remove badges
+  s = s.replace(/\b(Promoted|New)\s*$/i, '');
+  // Remove trailing dates
+  s = s.replace(/\b(Last |Just |\d+ (second|minute|hour|day|week|month|year)).*$/i, '');
+  s = s.replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December).*$/i, '');
+  // Remove trailing workload percentages
+  s = s.replace(/\s*\d+\s*[–-]\s*\d+\s*%.*$/, '');
+  s = s.replace(/\s*\d+%.*$/, '');
+  // Remove "position" prefix
+  s = s.replace(/^position\s*/i, '');
+  // Clean whitespace
+  s = s.replace(/\s+/g, ' ').trim();
+  // Safety: if still too long, truncate at first suspicious boundary
+  if (s.length > 120) s = s.substring(0, 120).replace(/\s\S*$/, '').trim();
+  return s;
+}
+
+function cleanLocation(raw: string): string {
+  if (!raw) return '';
+  let s = raw;
+  // Cut at known UI markers
+  s = s.split(/SaveApply|Save$|Apply$|Log in|Job summary|You are|See my match|\d+%/i)[0];
+  // Remove trailing dates
+  s = s.replace(/\b(Last |Just |\d+ (second|minute|hour|day|week|month|year)).*$/i, '');
+  // Clean whitespace
+  s = s.replace(/\s+/g, ' ').trim();
+  // Location should be short
+  if (s.length > 80) s = s.substring(0, 80).replace(/\s\S*$/, '').trim();
+  return s;
+}
+
 export class JobsChScraper extends BaseScraper {
   readonly name = 'jobs.ch';
   readonly source = 'jobsch' as const;
@@ -20,14 +58,16 @@ export class JobsChScraper extends BaseScraper {
       await page.setUserAgent(getRandomUserAgent());
       await page.setViewport({ width: 1920, height: 1080 });
 
-      // Split multi-location into separate searches
+      // Split multi-location into separate searches, divide budget fairly
       const locations = location.includes(',')
         ? location.split(',').map((l) => l.trim()).filter(Boolean)
         : [location];
+      const perLocationMax = Math.ceil(maxJobs / locations.length);
 
       for (const loc of locations) {
+        let locationCount = 0;
         for (const keyword of keywords) {
-          if (jobs.length >= maxJobs) break;
+          if (locationCount >= perLocationMax || jobs.length >= maxJobs) break;
 
           const searchUrl = `https://www.jobs.ch/en/vacancies/?term=${encodeURIComponent(keyword)}&location=${encodeURIComponent(loc)}&sort=date`;
           logger.info(`jobs.ch: searching "${keyword}" in ${loc}`);
@@ -84,7 +124,7 @@ export class JobsChScraper extends BaseScraper {
           logger.info(`jobs.ch: found ${jobCards.length} job cards for "${keyword}" in ${loc}`);
 
           for (const card of jobCards) {
-            if (jobs.length >= maxJobs) break;
+            if (locationCount >= perLocationMax || jobs.length >= maxJobs) break;
             if (!card.title || !card.sourceId) continue;
 
             // Check for existing job in DB
@@ -132,13 +172,14 @@ export class JobsChScraper extends BaseScraper {
               const el = document.querySelector('[data-cy="company-name"], [class*="company"]');
               return el?.textContent?.trim() || '';
             }) || 'Unbekannt';
-            company = company.replace(/^position\s*/i, '').trim();
+            company = cleanCompanyName(company);
 
             // Extract location from detail page if missing
-            const jobLocation = card.location || await page.evaluate(() => {
+            let jobLocation = card.location || await page.evaluate(() => {
               const el = document.querySelector('[data-cy="info-location"], [class*="location"]');
               return el?.textContent?.trim() || '';
             });
+            jobLocation = cleanLocation(jobLocation);
 
             // Detect application method
             const applyButton = await page.$('a[data-cy="apply-button"], button[data-cy="apply-button"], a[href*="apply"]');
@@ -182,6 +223,7 @@ export class JobsChScraper extends BaseScraper {
             };
 
             jobs.push(job);
+            locationCount++;
             logger.info(`jobs.ch: scraped "${job.title}" at ${job.company} (${jobLocation})`);
           }
         }

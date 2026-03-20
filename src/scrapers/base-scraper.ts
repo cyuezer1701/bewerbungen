@@ -22,7 +22,7 @@ function findPlaywrightChrome(): string | undefined {
 
 export interface ScrapedJob {
   sourceId: string;
-  source: 'linkedin' | 'indeed' | 'jobsch';
+  source: 'linkedin' | 'indeed' | 'jobsch' | 'glassdoor' | 'google';
   title: string;
   company: string;
   location: string;

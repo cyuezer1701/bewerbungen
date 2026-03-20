@@ -138,10 +138,16 @@ export default function SettingsPage() {
         {f('Standort', 'search_location')}
         {n('Radius (km)', 'search_radius_km', 10, 200)}
         {n('Min Match Score (%)', 'min_match_score')}
-        {n('Max Jobs pro Tag', 'max_jobs_per_day', 5, 50)}
-        {t('LinkedIn Scraper', 'scraper_linkedin_enabled')}
-        {t('Indeed Scraper', 'scraper_indeed_enabled')}
+        {n('Max Jobs pro Tag', 'max_jobs_per_day', 10, 100)}
         {t('jobs.ch Scraper', 'scraper_jobsch_enabled')}
+        {t('JobSpy (Indeed, Glassdoor, Google)', 'scraper_jobspy_enabled')}
+        {settings.scraper_jobspy_enabled === 'true' && (
+          <div className="ml-4 space-y-3 border-l-2 border-border pl-4">
+            {f('Quellen (kommagetrennt)', 'jobspy_sites', 'text', 'indeed,glassdoor,google')}
+            {f('Land', 'jobspy_country', 'text', 'Switzerland')}
+            {n('Max Alter (Stunden)', 'jobspy_hours_old', 24, 168)}
+          </div>
+        )}
         {f('Cron Schedule', 'scraper_schedule', 'text', '0 7 * * *')}
       </div>
     ),

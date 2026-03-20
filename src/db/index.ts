@@ -114,6 +114,27 @@ function runMigrations(db: Database.Database): void {
     db.exec('ALTER TABLE applications ADD COLUMN fact_check_violations TEXT');
     logger.info('Migration: added applications.fact_check_violations');
   }
+
+  // Dedup fix: UNIQUE index on (source, source_id)
+  const hasUniqueIdx = (db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_jobs_source_source_id'"
+  ).get() as { name: string } | undefined);
+  if (!hasUniqueIdx) {
+    // Delete existing duplicates first (keep oldest per source+source_id)
+    db.exec(`
+      DELETE FROM jobs WHERE rowid NOT IN (
+        SELECT MIN(rowid) FROM jobs WHERE source_id IS NOT NULL GROUP BY source, source_id
+      ) AND source_id IS NOT NULL
+    `);
+    const deleted = db.prepare(
+      "SELECT changes() as count"
+    ).get() as { count: number };
+    if (deleted.count > 0) {
+      logger.info(`Migration: removed ${deleted.count} duplicate jobs`);
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_source_source_id ON jobs(source, source_id)');
+    logger.info('Migration: created UNIQUE index on jobs(source, source_id)');
+  }
 }
 
 export function closeDatabase(): void {

@@ -5,10 +5,17 @@ import { alertScraperError } from '../utils/alerter.js';
 import { getSetting } from '../db/settings.js';
 import { insertJob, logActivity, normalizeCompany } from '../db/queries.js';
 import { type ScrapedJob, launchStealthBrowser } from './base-scraper.js';
-import { IndeedScraper } from './indeed-scraper.js';
-import { LinkedInScraper } from './linkedin-scraper.js';
 import { JobsChScraper } from './jobsch-scraper.js';
+import { runJobSpy } from './jobspy-scraper.js';
 import type { BaseScraper } from './base-scraper.js';
+
+// --- Global Scrape Lock ---
+
+let scrapeRunning = false;
+
+export function isScrapeRunning(): boolean {
+  return scrapeRunning;
+}
 
 // --- Levenshtein Distance ---
 
@@ -59,9 +66,6 @@ function deduplicateJobs(jobs: ScrapedJob[]): ScrapedJob[] {
     const jobKey = normalizeForComparison(`${job.title} ${job.company}`);
 
     const isDuplicate = unique.some((existing) => {
-      // Only dedup across different sources
-      if (existing.source === job.source) return false;
-
       const existingKey = normalizeForComparison(`${existing.title} ${existing.company}`);
       return levenshteinSimilarity(jobKey, existingKey) > 0.85;
     });
@@ -75,7 +79,7 @@ function deduplicateJobs(jobs: ScrapedJob[]): ScrapedJob[] {
 
   const removed = jobs.length - unique.length;
   if (removed > 0) {
-    logger.info(`Deduplication: removed ${removed} cross-source duplicates`);
+    logger.info(`Deduplication: removed ${removed} duplicates`);
   }
 
   return unique;
@@ -84,12 +88,17 @@ function deduplicateJobs(jobs: ScrapedJob[]): ScrapedJob[] {
 // --- Scraper Orchestrator ---
 
 export async function runScrapers(): Promise<ScrapedJob[]> {
+  if (scrapeRunning) {
+    logger.warn('Scraper already running, skipping');
+    return [];
+  }
+  scrapeRunning = true;
+
+  try {
   logger.info('Starting scraper run...');
 
-  // Build scraper list based on settings (Indeed/LinkedIn disabled by default — too aggressive blocking)
+  // Only jobs.ch scraper
   const scrapers: BaseScraper[] = [];
-  if (getSetting('scraper_indeed_enabled') === 'true') scrapers.push(new IndeedScraper());
-  if (getSetting('scraper_linkedin_enabled') === 'true') scrapers.push(new LinkedInScraper());
   if (getSetting('scraper_jobsch_enabled') !== 'false') scrapers.push(new JobsChScraper());
 
   if (scrapers.length === 0) {
@@ -113,7 +122,7 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
 
     // Run scrapers sequentially (share browser, reduce detection risk)
     // Global job limit shared across all scrapers
-    const globalMax = config.MAX_JOBS_PER_DAY;
+    const globalMax = parseInt(getSetting('max_jobs_per_day') || '', 10) || config.MAX_JOBS_PER_DAY;
     for (const scraper of scrapers) {
       if (allJobs.length >= globalMax) {
         logger.info(`Global job limit (${globalMax}) reached, skipping ${scraper.name}`);
@@ -139,6 +148,21 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
     if (browser) {
       await browser.close();
       logger.info('Browser closed');
+    }
+  }
+
+  // JobSpy: additional sources (Indeed, Glassdoor, Google)
+  if (getSetting('scraper_jobspy_enabled') !== 'false') {
+    try {
+      const globalMax = parseInt(getSetting('max_jobs_per_day') || '', 10) || config.MAX_JOBS_PER_DAY;
+      const remaining = Math.max(0, globalMax - allJobs.length);
+      if (remaining > 0) {
+        const jobspyJobs = await runJobSpy(allKeywords.slice(0, 5), location, remaining);
+        allJobs.push(...jobspyJobs);
+      }
+    } catch (err) {
+      logger.error('JobSpy scraper failed', { error: err });
+      await alertScraperError('JobSpy', err);
     }
   }
 
@@ -212,4 +236,7 @@ export async function runScrapers(): Promise<ScrapedJob[]> {
   logger.info(`Scraper run complete: ${allJobs.length} found, ${uniqueJobs.length} unique, ${excludedCount} excluded by keywords, ${savedCount} saved to DB`);
 
   return filteredJobs;
+  } finally {
+    scrapeRunning = false;
+  }
 }

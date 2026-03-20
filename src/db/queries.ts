@@ -98,7 +98,7 @@ export function insertJob(job: {
 }): void {
   const db = getDb();
   db.prepare(`
-    INSERT INTO jobs (id, source, source_id, source_url, title, company, location, description,
+    INSERT OR IGNORE INTO jobs (id, source, source_id, source_url, title, company, location, description,
                       salary_range, application_method, application_url, application_email, posted_at,
                       contact_person, contact_gender, contact_title, contact_department,
                       reference_number, salary_requested_in_posting, company_normalized)

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../../db/index.js';
 import { getJobById, updateJobStatus, logActivity, normalizeCompany, getRecentApplicationsByCompany } from '../../db/queries.js';
-import { runScrapers } from '../../scrapers/index.js';
+import { runScrapers, isScrapeRunning } from '../../scrapers/index.js';
 import { runMatching } from '../../matching/index.js';
 import { scoreJob } from '../../matching/job-scorer.js';
 import { getStructuredCV } from '../../matching/cv-parser.js';
@@ -101,6 +101,9 @@ jobsRouter.delete('/:id', (req, res) => {
 // POST /api/jobs/scrape-now — Trigger manual scraper run
 // curl -X POST -H "Authorization: Bearer TOKEN" http://localhost:3333/api/jobs/scrape-now
 jobsRouter.post('/scrape-now', async (req, res) => {
+  if (isScrapeRunning()) {
+    return res.status(409).json({ error: 'Scraper already running' });
+  }
   try {
     const jobs = await runScrapers();
     const matched = await runMatching();

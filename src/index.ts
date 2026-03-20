@@ -8,7 +8,7 @@ import { getMatchedNewJobs, getWeeklyStats, getAverageSalary, getApplicationsDue
 import { followUpKeyboard } from './bot/keyboards.js';
 import { initAlerter, alert } from './utils/alerter.js';
 import { setLastScrape, buildHealthLine } from './utils/health.js';
-import { initDefaultSettings, getSetting } from './db/settings.js';
+import { initDefaultSettings, getSetting, setSetting } from './db/settings.js';
 import { startApiServer } from './api/index.js';
 import { testTag } from './utils/test-mode.js';
 import cron from 'node-cron';
@@ -103,7 +103,19 @@ function main() {
       logger.warn('Pipeline already running, skipping duplicate cron trigger');
       return;
     }
+
+    // DB-based guard: skip if last pipeline ran less than 30 min ago (survives restarts)
+    const lastRun = getSetting('last_pipeline_run');
+    if (lastRun) {
+      const elapsed = Date.now() - new Date(lastRun).getTime();
+      if (elapsed < 30 * 60 * 1000) {
+        logger.warn(`Pipeline ran ${Math.round(elapsed / 1000)}s ago, skipping`);
+        return;
+      }
+    }
+
     pipelineRunning = true;
+    setSetting('last_pipeline_run', new Date().toISOString());
     logger.info('Cron job triggered: starting pipeline...');
     const telegramBot = getBot();
 
